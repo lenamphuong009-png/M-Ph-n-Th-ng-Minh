@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trang Tưởng Niệm Thông Minh - Phyverse</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f9; margin: 0; padding: 0; text-align: center; color: #333; }
+        .container { max-width: 500px; margin: 20px auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .avatar { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid #d4af37; }
+        h1 { color: #2c3e50; font-size: 24px; margin: 15px 0 5px 0; }
+        .dates { font-style: italic; color: #7f8c8d; margin-bottom: 20px; }
+        .story { text-align: left; line-height: 1.6; font-size: 16px; background: #fcfcfc; padding: 15px; border-radius: 8px; border-left: 4px solid #d4af37; margin-bottom: 20px; }
+        .form-group { text-align: left; margin-bottom: 15px; }
+        label { font-weight: bold; display: block; margin-bottom: 5px; }
+        input, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+        .btn-submit { width: 100%; padding: 12px; background: #2c3e50; color: white; border: none; border-radius: 25px; font-weight: bold; cursor: pointer; font-size: 16px; }
+        .btn-submit:hover { background: #1a252f; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <img src="https://unsplash.com" alt="Chân dung" class="avatar">
+    <h1>Nguyễn Văn A</h1>
+    <p class="dates">Sinh: 01/01/1950 — Mất: 15/07/2025</p>
+    
+    <div class="story">
+        <h3>Tiểu sử & Ký ức</h3>
+        <p>Đây là trang tưởng niệm số hóa kết nối qua chip NFC. Dữ liệu yêu cầu dịch vụ chăm sóc dưới đây sẽ được lưu trực tiếp vào hệ thống cơ sở dữ liệu Supabase của Phyverse.</p>
+    </div>
+
+    <!-- FORM ĐẶT DỊCH VỤ GỬI VỀ SUPABASE -->
+    <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #eee;">
+        <h3 style="margin-top:0; color:#2c3e50;">Đăng Ký Dịch Vụ Chăm Sóc</h3>
+        <form id="bookingForm">
+            <div class="form-group">
+                <label>Số điện thoại người gửi:</label>
+                <input type="tel" id="customerPhone" placeholder="Nhập số điện thoại của bạn" required>
+            </div>
+            <div class="form-group">
+                <label>Chọn dịch vụ:</label>
+                <select id="serviceType">
+                    <option value="Thắp hương ảo">Thắp hương & Dâng lễ</option>
+                    <option value="Đăng ký dọn mộ">Đăng ký quét dọn mộ phần</option>
+                    <option value="Dâng hoa tươi">Đặt hoa tươi định kỳ</option>
+                </select>
+            </div>
+            <button type="submit" class="btn-submit">Gửi Yêu Cầu Đến Hệ Thống</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    // THAY THẾ 2 THÔNG TIN NÀY BẰNG 2 CHÌA KHÓA BẠN VỪA COPPY ĐƯỢC
+    const SUPABASE_URL = "ĐIỀN_PROJECT_URL_CỦA_BẠN_VÀO_ĐÂY";
+    const SUPABASE_ANON_KEY = "ĐIỀN_ANON_KEY_CỦA_BẠN_VÀO_ĐÂY";
+
+    document.getElementById('bookingForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const phone = document.getElementById('customerPhone').value;
+        const service = document.getElementById('serviceType').value;
+
+        // Gửi dữ liệu lên bảng 'bookings' của Supabase
+        try {
+            const response = await fetch(`${SUPABASE_URL}/rest/v1/bookings`, {
+                method: 'POST',
+                headers: {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=minimal'
+                },
+                body: JSON.stringify({
+                    customer_phone: phone,
+                    service_type: service,
+                    status: 'Chờ xử lý'
+                })
+            });
+
+            if (response.ok) {
+                alert('✨ Gửi yêu cầu thành công! Dữ liệu đã được lưu an toàn vào Supabase của bạn.');
+                document.getElementById('bookingForm').reset();
+            } else {
+                alert('Có lỗi xảy ra khi kết nối dữ liệu.');
+            }
+        } catch (error) {
+            console.error('Lỗi:', error);
+            alert('Không thể kết nối đến máy chủ.');
+        }
+    });
+</script>
+
+</body>
+</html>
