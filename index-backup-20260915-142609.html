@@ -220,10 +220,39 @@
 </section>
 
 <section class="reveal">
-  <div class="eyebrow">Ghi âm kỷ niệm</div>
-  <h2>Giọng nói được lưu giữ</h2>
+  <div class="eyebrow">Âm thanh tưởng niệm</div>
+  <h2>Nhạc và giọng nói lưu giữ</h2>
+
+  <div class="copyright-note">Vui lòng chỉ tải lên âm thanh do gia đình sở hữu, được cho phép sử dụng hoặc có giấy phép phù hợp. Không tải lên nhạc thương mại nếu chưa có quyền sử dụng.</div>
+
+  <div class="audio-sub" style="margin-top:1.5rem;">
+    <div class="audio-sub-title">Nhạc tưởng niệm</div>
+    <div id="musicEmpty" class="audio-empty">Gia đình chưa tải lên bản nhạc nào.</div>
+    <div id="musicCard" class="track-card" style="display:none;">
+      <button class="track-play" id="musicPlayBtn" type="button" aria-label="Phát">▶</button>
+      <div class="track-info">
+        <div class="track-title" id="musicTrackTitle"></div>
+        <audio id="musicAudio" preload="none"></audio>
+      </div>
+      <div class="track-actions">
+        <button id="musicChangeBtn" type="button">Đổi bài</button>
+        <button id="musicDeleteBtn" type="button">Xóa</button>
+      </div>
+    </div>
+    <div class="audio-upload">
+      <input type="file" id="musicFileInput" accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a,audio/m4a,audio/ogg,.mp3,.wav,.m4a,.ogg">
+      <div class="audio-hint">Định dạng: MP3, WAV, M4A, OGG — tối đa 20MB</div>
+      <label class="consent-row">
+        <input type="checkbox" id="musicConsentCheck">
+        <span>Tôi xác nhận rằng mình có quyền sử dụng và chia sẻ tệp âm thanh này trên trang tưởng niệm. Tôi chịu trách nhiệm về quyền sử dụng nội dung đã tải lên.</span>
+      </label>
+      <div class="audio-error" id="musicUploadError"></div>
+      <button class="audio-btn primary" id="musicUploadBtn" type="button">Tải nhạc lên</button>
+    </div>
+  </div>
 
   <div class="audio-sub">
+    <div class="audio-sub-title">Ghi âm kỷ niệm</div>
     <div id="recEmpty" class="audio-empty">Chưa có bản ghi âm nào được lưu giữ.</div>
     <div id="recList"></div>
     <div class="audio-upload">
@@ -232,7 +261,6 @@
       <input type="text" id="recTitleInput" placeholder="Tiêu đề bản ghi âm (VD: Lời dặn dò)">
       <textarea id="recDescInput" placeholder="Mô tả hoặc chú thích ngắn (không bắt buộc)"></textarea>
       <div class="copyright-note">Người tải lên phải có quyền chia sẻ bản ghi âm này. Nếu trong bản ghi có tiếng nói hoặc sự xuất hiện của người còn sống khác (ngoài người được tưởng niệm), vui lòng cân nhắc và có sự đồng ý của họ trước khi chia sẻ công khai.</div>
-      <div class="copyright-note">Bản ghi âm hiện chỉ được lưu tạm trong phiên trình duyệt này (chưa lưu lên máy chủ) — sẽ mất khi tải lại trang hoặc mở trên thiết bị/trình duyệt khác.</div>
       <label class="consent-row">
         <input type="checkbox" id="recConsentCheck">
         <span>Tôi xác nhận rằng mình có quyền sử dụng và chia sẻ tệp âm thanh này trên trang tưởng niệm. Tôi chịu trách nhiệm về quyền sử dụng nội dung đã tải lên.</span>
@@ -302,19 +330,19 @@
     msgInput.value = '';
   });
 
-  // ===== GHI ÂM KỶ NIỆM =====
+  // ===== ÂM THANH TƯỞNG NIỆM =====
   //
   // PHÂN TÁCH FRONTEND / BACKEND — ĐỌC KỸ TRƯỚC KHI KẾT NỐI SUPABASE:
   //
   // (A) CHỈ LÀ TẠM THỜI, DÙNG URL.createObjectURL — KHÔNG LƯU TRỮ VĨNH VIỄN:
-  //     Toàn bộ việc phát bản ghi âm ngay trong trình duyệt ở file này dùng
+  //     Toàn bộ việc phát nhạc/ghi âm ngay trong trình duyệt ở file này dùng
   //     URL.createObjectURL(file), tạo ra 1 địa chỉ TẠM chỉ tồn tại trong bộ
   //     nhớ của đúng phiên trình duyệt đang mở. KHÔNG có tệp nào được gửi đi
   //     đâu cả, KHÔNG ai khác xem được, và MẤT hoàn toàn khi tải lại trang.
   //     Đây tuyệt đối KHÔNG PHẢI lưu trữ vĩnh viễn — không được hiểu nhầm.
   //
   // (B) CẦN SUPABASE STORAGE (khi kết nối backend thật):
-  //     Thay vì URL.createObjectURL, bước tải lên (nút
+  //     Thay vì URL.createObjectURL, bước tải lên (nút "Tải nhạc lên" /
   //     "Thêm bản ghi âm") cần gọi supabase.storage.from(<bucket>).upload(...)
   //     để đẩy file thật lên storage bucket, rồi lấy về URL công khai/ký
   //     (public URL hoặc signed URL) để phát thay cho URL tạm.
@@ -323,7 +351,7 @@
   //     CHƯA PHẢI đặc tả cuối cùng, cần chủ dự án xác nhận trước khi tạo:
   //       - ten_tep (tên tệp gốc)
   //       - duong_dan_tep (đường dẫn/URL thật trong Storage, thay cho objectUrl)
-  //       - loai_am_thanh ('ghi_am_ky_niem')
+  //       - loai_am_thanh ('nhac_tuong_niem' | 'ghi_am_ky_niem')
   //       - tieu_de
   //       - mo_ta
   //       - thu_tu (số nguyên, dùng cho sắp xếp — chỉ cần cho ghi âm)
@@ -385,6 +413,83 @@
     elError.textContent = '';
     elError.classList.remove('show');
   }
+
+  // --- Nhạc tưởng niệm (đúng 1 bản nhạc hiện tại) ---
+  var nhacTuongNiem = null; // { ten_bai_hat, objectUrl } — null nghĩa là chưa có
+  var musicEmpty = document.getElementById('musicEmpty');
+  var musicCard = document.getElementById('musicCard');
+  var musicAudio = document.getElementById('musicAudio');
+  var musicPlayBtn = document.getElementById('musicPlayBtn');
+  var musicTrackTitle = document.getElementById('musicTrackTitle');
+  var musicFileInput = document.getElementById('musicFileInput');
+  var musicUploadError = document.getElementById('musicUploadError');
+  var musicConsentCheck = document.getElementById('musicConsentCheck');
+
+  function renderMusic(){
+    if(!nhacTuongNiem){
+      musicEmpty.style.display = '';
+      musicCard.style.display = 'none';
+      return;
+    }
+    musicEmpty.style.display = 'none';
+    musicCard.style.display = 'flex';
+    musicTrackTitle.textContent = nhacTuongNiem.ten_bai_hat;
+    musicTrackTitle.title = nhacTuongNiem.ten_bai_hat; // xem đầy đủ tên khi hover, tránh vỡ layout với tên dài
+    musicAudio.src = nhacTuongNiem.objectUrl;
+    musicPlayBtn.textContent = '▶';
+  }
+
+  document.getElementById('musicUploadBtn').addEventListener('click', function(){
+    anLoi(musicUploadError);
+    var f = musicFileInput.files[0];
+    var loi = kiemTraTepAmThanh(f);
+    if(loi){ hienThiLoi(musicUploadError, loi); return; }
+    if(!musicConsentCheck.checked){
+      hienThiLoi(musicUploadError, 'Vui lòng xác nhận bạn có quyền sử dụng tệp này trước khi tải lên.');
+      return;
+    }
+    if(nhacTuongNiem){ musicAudio.pause(); URL.revokeObjectURL(nhacTuongNiem.objectUrl); }
+    nhacTuongNiem = { ten_bai_hat: f.name, objectUrl: URL.createObjectURL(f) };
+    musicFileInput.value = '';
+    musicConsentCheck.checked = false;
+    renderMusic();
+    // TODO backend: upload f lên Supabase Storage (bucket âm thanh), lưu
+    // { ten_tep, duong_dan_tep, loai_am_thanh: 'nhac_tuong_niem', ngay_tai_len,
+    //   da_xac_nhan_quyen_su_dung: true, thoi_diem_xac_nhan: new Date() }
+    // vào bảng dữ liệu, theo đúng RLS chỉ cho nguoi_quan_ly_id của trang này.
+  });
+
+  // Nếu trình duyệt không phát được tệp (hỏng/không hỗ trợ codec), báo lỗi
+  // thay vì để trang gãy im lặng.
+  musicAudio.addEventListener('error', function(){
+    if(nhacTuongNiem){ hienThiLoi(musicUploadError, 'Không thể phát tệp này, có thể tệp bị lỗi hoặc không được hỗ trợ.'); }
+  });
+
+  // Không tự động phát — chỉ phát khi người dùng chủ động bấm nút này.
+  musicPlayBtn.addEventListener('click', function(){
+    if(musicAudio.paused){
+      musicAudio.play();
+      musicPlayBtn.textContent = '❙❙';
+    } else {
+      musicAudio.pause();
+      musicPlayBtn.textContent = '▶';
+    }
+  });
+  musicAudio.addEventListener('ended', function(){ musicPlayBtn.textContent = '▶'; });
+
+  document.getElementById('musicChangeBtn').addEventListener('click', function(){
+    musicFileInput.click();
+  });
+  document.getElementById('musicDeleteBtn').addEventListener('click', function(){
+    if(!nhacTuongNiem) return;
+    if(!window.confirm('Xóa bản nhạc tưởng niệm hiện tại?')) return;
+    musicAudio.pause();
+    musicAudio.removeAttribute('src');
+    URL.revokeObjectURL(nhacTuongNiem.objectUrl);
+    nhacTuongNiem = null;
+    renderMusic();
+    // TODO backend: xóa file khỏi Supabase Storage + xóa bản ghi tương ứng trong bảng
+  });
 
   // --- Ghi âm kỷ niệm (danh sách nhiều bản ghi) ---
   var ghiAmKyNiem = []; // [{ id, tieu_de, mo_ta, objectUrl }, ...]
@@ -554,6 +659,7 @@
     // cho nguoi_quan_ly_id của trang này.
   });
 
+  renderMusic();
   renderRecordings();
 </script>
 
