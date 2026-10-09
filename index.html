@@ -94,6 +94,7 @@
   @keyframes rise{0%{opacity:0;transform:translate(-50%,0) scale(1);}15%{opacity:0.5;}100%{opacity:0;transform:translate(calc(-50% + var(--dx)),-90px) scale(5);}}
   .light-btn{font-family:'Be Vietnam Pro',sans-serif;font-weight:500;font-size:14px;color:var(--paper);background:var(--ink);border:none;border-radius:2px;padding:0.75rem 1.75rem;cursor:pointer;}
   .light-btn:active{transform:scale(0.98);}
+  .light-btn:disabled{opacity:0.6;cursor:default;}
   .count{margin-top:0.9rem;font-size:13px;color:var(--sage);}
 
   /* Gallery */
@@ -194,6 +195,7 @@
     </div>
     <button class="light-btn" id="lightBtn">Thắp một nén hương</button>
     <div class="count" id="countText"></div>
+    <div class="count" id="incenseStatus" role="status" aria-live="polite" hidden></div>
   </div>
 </section>
 
@@ -283,8 +285,7 @@
         setTimeout(function(){ s.remove(); }, 3200 + i*500);
       })(i);
     }
-    count++;
-    countText.textContent = count + ' nén hương đã được thắp';
+    submitIncense(); // ghi nhận qua RPC light_incense — xem khối MEMORIAL ENGINE V1
   });
 
   var msgInput = document.getElementById('msgInput');
@@ -584,13 +585,23 @@
     return slug;
   }
 
-  function loadMemorial(slug){
+  var sbClient = null;    // 1 client dùng chung cho cả trang
+  var currentSlug = null; // chỉ được gán sau khi memorial đã tải và render thành công
+
+  function getClient(){
+    if (sbClient) return sbClient;
     if (!window.supabase || typeof window.supabase.createClient !== 'function') {
-      return Promise.reject(new Error('Không nạp được thư viện Supabase'));
+      throw new Error('Không nạp được thư viện Supabase');
     }
-    var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false }
     });
+    return sbClient;
+  }
+
+  function loadMemorial(slug){
+    var client;
+    try { client = getClient(); } catch (e) { return Promise.reject(e); }
     return client
       .from('graves')
       .select(GRAVE_COLUMNS)
@@ -685,12 +696,53 @@
     show($('footerNote'), !!m.footer);
   }
 
-  // Chỉ hiển thị số từ DB. Nút thắp hương giữ hiệu ứng cũ (+1 tạm trên máy),
-  // CHƯA lưu về server — nối RPC light_incense là bước sau.
+  // Số ban đầu lấy từ DB. Mỗi lần thắp gọi RPC light_incense(p_slug) và hiển thị
+  // ĐÚNG số server trả về — không tự +1 trên máy.
+  // Rủi ro đã biết (V1 chấp nhận): anon gọi được RPC nên có thể bị bơm số; chưa
+  // giới hạn tần suất phía server. Khóa nút chỉ chặn bấm lặp trên giao diện.
   function renderIncenseCount(m){
     count = m.incense;
     countText.textContent = count + ' nén hương đã được thắp';
     show($('secIncense'), true);
+  }
+
+  var INCENSE_TIMEOUT_MS = 15000;
+  var incensePending = false;
+
+  function setIncenseStatus(msg){
+    var el = $('incenseStatus');
+    el.textContent = msg || '';
+    show(el, !!msg);
+  }
+
+  function submitIncense(){
+    if (incensePending || !currentSlug) return;
+    var client;
+    try { client = getClient(); } catch (e) { setIncenseStatus('Chưa ghi nhận được nén hương. Vui lòng thử lại.'); return; }
+    incensePending = true;
+    btn.disabled = true;
+    setIncenseStatus('');
+    var req = client.rpc('light_incense', { p_slug: currentSlug });
+    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+      req = req.abortSignal(AbortSignal.timeout(INCENSE_TIMEOUT_MS));
+    }
+    Promise.resolve(req).then(function(res){
+      if (res.error) throw res.error;
+      var n = res.data;
+      if (Number.isInteger(n) && n >= 0) {
+        count = n;
+        countText.textContent = count + ' nén hương đã được thắp';
+      } else {
+        // NULL: server không ghi nhận (memorial không còn công khai/không tồn tại)
+        setIncenseStatus('Chưa ghi nhận được nén hương. Vui lòng thử lại sau.');
+      }
+    }).catch(function(err){
+      console.error('[memorial] thắp hương thất bại:', err);
+      setIncenseStatus('Chưa ghi nhận được nén hương do lỗi kết nối. Vui lòng thử lại.');
+    }).then(function(){
+      incensePending = false;
+      btn.disabled = false;
+    });
   }
 
   var STATE_TEXT = {
@@ -708,6 +760,7 @@
   }
 
   function initMemorial(){
+    currentSlug = null;
     showState('loading');
     var slug = getSlug();
     if (!slug) { showState('notfound'); return; }
@@ -720,6 +773,7 @@
       renderWishes(m);
       renderIncenseCount(m);
       renderFooter(m);
+      currentSlug = slug;
       showState('ready');
     }).catch(function(err){
       console.error('[memorial] tải thất bại:', err);
