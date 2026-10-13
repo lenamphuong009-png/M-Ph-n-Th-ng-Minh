@@ -122,6 +122,39 @@
         <div class="actions"><button class="btn primary" type="submit" id="loginBtn">Đăng nhập</button></div>
         <div class="msg" id="loginMsg" role="alert"></div>
       </form>
+      <p style="margin:1rem 0 0"><a href="#" id="forgotLink" class="muted">Quên mật khẩu?</a></p>
+      <form id="forgotForm" hidden>
+        <p class="muted" style="margin:0.5rem 0 0">Nhập email tài khoản quản lý. Hệ thống sẽ gửi một liên kết để đặt mật khẩu mới. Liên kết có thời hạn và chỉ dùng được một lần — hãy mở sớm.</p>
+        <label class="f" for="forgotEmail">Email</label>
+        <input type="email" id="forgotEmail" autocomplete="username" required>
+        <div class="actions"><button class="btn" type="submit" id="forgotBtn">Gửi email khôi phục</button></div>
+        <div class="msg" id="forgotMsg" role="alert"></div>
+      </form>
+    </div>
+  </section>
+
+  <!-- ĐẶT MẬT KHẨU MỚI (mở từ liên kết trong email khôi phục) -->
+  <section id="viewReset" class="login" hidden>
+    <h1>Đặt mật khẩu mới</h1>
+    <p class="muted" id="resetIntro">Liên kết khôi phục hợp lệ. Hãy đặt mật khẩu mới cho tài khoản quản lý.</p>
+    <div class="card">
+      <form id="resetForm" autocomplete="off">
+        <label class="f" for="newPw1">Mật khẩu mới <span class="hint">(ít nhất 8 ký tự)</span></label>
+        <input type="password" id="newPw1" autocomplete="new-password" required>
+        <label class="f" for="newPw2">Nhập lại mật khẩu mới</label>
+        <input type="password" id="newPw2" autocomplete="new-password" required>
+        <div class="actions"><button class="btn primary" type="submit" id="resetBtn">Lưu mật khẩu mới</button></div>
+        <div class="msg" id="resetMsg" role="alert"></div>
+      </form>
+    </div>
+  </section>
+
+  <!-- LIÊN KẾT KHÔI PHỤC KHÔNG HỢP LỆ / HẾT HẠN -->
+  <section id="viewLinkError" class="login" hidden>
+    <h1>Liên kết không dùng được</h1>
+    <div class="card">
+      <p id="linkErrorText" style="margin-top:0"></p>
+      <div class="actions"><button type="button" class="btn primary" id="linkErrorBack">Về trang đăng nhập để gửi lại</button></div>
     </div>
   </section>
 
@@ -257,7 +290,10 @@
     url: 'https://mhyadympadwxzuwwlnps.supabase.co',
     key: 'sb_publishable_JmjzqnFPKcC2bQ2T4Kr9vQ_QoFzdXN1',
     bucket: 'memorial-media',
-    storageKey: 'phy-tuongniem-quanly'   // index.html (?preview=1) dùng chung khóa này để đọc bản nháp
+    storageKey: 'phy-tuongniem-quanly',  // index.html (?preview=1) dùng chung khóa này để đọc bản nháp
+    // Địa chỉ nhận liên kết khôi phục mật khẩu = chính trang quản lý này (cố định tên file,
+    // phải có trong Authentication → URL Configuration → Redirect URLs của staging).
+    recoveryPath: '/admin.html'
   };
   var LIMIT = { image: 10 * 1024 * 1024, video: 50 * 1024 * 1024 };
   var MIME_EXT = { 'image/jpeg':'jpg', 'image/png':'png', 'image/webp':'webp',
@@ -301,10 +337,31 @@
     return 'Có lỗi xảy ra: ' + (m || 'không rõ nguyên nhân') + '. Dữ liệu đã lưu trước đó không bị ảnh hưởng.';
   }
 
+  // ===== ĐỌC THAM SỐ LIÊN KẾT KHÔI PHỤC (trước khi thư viện xử lý và xóa khỏi URL) =====
+  // Supabase trả về: thành công → #access_token=…&type=recovery ; lỗi → #error=…&error_code=…
+  // Chỉ đọc loại liên kết và mã lỗi — KHÔNG ghi token ra log hay giao diện.
+  var LINK = (function(){
+    var h = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+    var q = new URLSearchParams(window.location.search || '');
+    var get = function(k){ return h.get(k) || q.get(k) || ''; };
+    return {
+      isRecovery: get('type') === 'recovery',
+      hasError: !!(get('error') || get('error_code')),
+      errorCode: get('error_code') || get('error'),
+      hasAny: !!(h.toString() || q.get('error') || q.get('error_code') || q.get('type'))
+    };
+  })();
+  function cleanUrl(){ // xóa token/mã lỗi khỏi thanh địa chỉ và lịch sử trình duyệt
+    try { history.replaceState(null, '', window.location.pathname); } catch (e) {}
+  }
+
   var sb;
   try {
     sb = window.supabase.createClient(CFG.url, CFG.key, {
-      auth: { storageKey: CFG.storageKey, persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
+      // flowType 'implicit': liên kết trong email mở được trên thiết bị khác (VD: email mở trên điện thoại).
+      // detectSessionInUrl: true để nhận phiên khôi phục từ liên kết email.
+      auth: { storageKey: CFG.storageKey, persistSession: true, autoRefreshToken: true,
+              detectSessionInUrl: true, flowType: 'implicit' }
     });
   } catch (e) {
     $('bootMsg').textContent = 'Không nạp được thư viện kết nối. Kiểm tra mạng rồi tải lại trang.';
@@ -315,7 +372,7 @@
 
   // ===== ĐIỀU HƯỚNG =====
   function go(view){
-    ['viewLogin','viewList','viewEdit'].forEach(function(v){ show($(v), v === view); });
+    ['viewLogin','viewList','viewEdit','viewReset','viewLinkError'].forEach(function(v){ show($(v), v === view); });
     show($('bootMsg'), false);
     window.scrollTo(0, 0);
   }
@@ -740,14 +797,99 @@
   $('lightbox').addEventListener('click', function(e){ if (e.target === this) { show(this, false); $('lightboxImg').src = ''; } });
   document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && !$('lightbox').hidden) { show($('lightbox'), false); } });
 
+  // ===== QUÊN MẬT KHẨU =====
+  function authErrText(err){
+    var code = (err && (err.code || err.error_code)) || '';
+    var m = (err && err.message) || '';
+    if (code === 'over_email_send_rate_limit' || err && err.status === 429 || /rate limit|too many/i.test(m))
+      return 'Đã gửi quá nhiều yêu cầu. Vui lòng đợi vài phút rồi thử lại.';
+    if (code === 'same_password') return 'Mật khẩu mới phải khác mật khẩu cũ.';
+    if (code === 'weak_password' || /weak|at least/i.test(m)) return 'Mật khẩu chưa đủ mạnh. Hãy dùng ít nhất 8 ký tự, gồm chữ và số.';
+    if (code === 'session_not_found' || code === 'session_expired' || code === 'bad_jwt' || /session|JWT|expired|missing/i.test(m) || err && err.status === 401)
+      return 'Phiên khôi phục đã hết hạn hoặc không hợp lệ. Hãy gửi lại email khôi phục.';
+    if (/redirect/i.test(m)) return 'Địa chỉ trang quản lý chưa được cho phép trong cấu hình đăng nhập (Redirect URLs). Liên hệ quản trị kỹ thuật.';
+    return friendly(err);
+  }
+  $('forgotLink').addEventListener('click', function(e){
+    e.preventDefault();
+    var f = $('forgotForm'); show(f, f.hidden);
+    if (!f.hidden) { $('forgotEmail').value = $('loginEmail').value.trim(); $('forgotEmail').focus(); }
+  });
+  $('forgotForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var email = $('forgotEmail').value.trim();
+    if (!email) { setMsg($('forgotMsg'), 'Vui lòng nhập email.', 'err'); return; }
+    var btn = $('forgotBtn'); btn.disabled = true; setMsg($('forgotMsg'), 'Đang gửi…');
+    var redirectTo = window.location.origin + CFG.recoveryPath;
+    sb.auth.resetPasswordForEmail(email, { redirectTo: redirectTo }).then(function(res){
+      if (res.error) throw res.error;
+      // Thông báo chung — không tiết lộ email có tồn tại hay không
+      setMsg($('forgotMsg'), 'Nếu email này có tài khoản, một email hướng dẫn đặt lại mật khẩu đã được gửi. Hãy kiểm tra cả hộp thư Spam, và mở liên kết trên trình duyệt có thể truy cập trang này.', 'ok');
+    }).catch(function(err){ setMsg($('forgotMsg'), authErrText(err), 'err'); })
+      .then(function(){ btn.disabled = false; });
+  });
+
+  // ===== ĐẶT MẬT KHẨU MỚI =====
+  var recoveryMode = false;
+  function enterRecovery(){
+    recoveryMode = true; state.user = null; setUserBar();
+    $('newPw1').value = ''; $('newPw2').value = ''; setMsg($('resetMsg'), '');
+    go('viewReset'); cleanUrl(); $('newPw1').focus();
+  }
+  function showLinkError(text){
+    recoveryMode = false; cleanUrl();
+    $('linkErrorText').textContent = text;
+    go('viewLinkError');
+  }
+  $('linkErrorBack').addEventListener('click', function(){
+    go('viewLogin'); show($('forgotForm'), true); $('forgotEmail').focus();
+  });
+  $('resetForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var p1 = $('newPw1').value, p2 = $('newPw2').value;
+    if (p1.length < 8) { setMsg($('resetMsg'), 'Mật khẩu cần ít nhất 8 ký tự.', 'err'); return; }
+    if (p1 !== p2) { setMsg($('resetMsg'), 'Hai lần nhập mật khẩu không khớp.', 'err'); return; }
+    var btn = $('resetBtn'); btn.disabled = true; setMsg($('resetMsg'), 'Đang lưu…');
+    sb.auth.updateUser({ password: p1 }).then(function(res){
+      if (res.error) throw res.error;
+      $('newPw1').value = ''; $('newPw2').value = '';
+      // Bắt đăng nhập lại bằng mật khẩu mới, không giữ phiên khôi phục tạm thời
+      return sb.auth.signOut().catch(function(){}).then(function(){
+        recoveryMode = false; state.user = null; setUserBar();
+        go('viewLogin');
+        setMsg($('loginMsg'), 'Đã đặt mật khẩu mới. Hãy đăng nhập bằng mật khẩu mới.', 'ok');
+      });
+    }).catch(function(err){ setMsg($('resetMsg'), authErrText(err), 'err'); })
+      .then(function(){ btn.disabled = false; });
+  });
+
   // ===== KHỞI ĐỘNG =====
+  sb.auth.onAuthStateChange(function(event, session){
+    if (event === 'PASSWORD_RECOVERY') { enterRecovery(); return; }
+    if (event === 'SIGNED_OUT' && !recoveryMode) { state.user = null; setUserBar(); go('viewLogin'); }
+  });
+  if (LINK.hasError) {
+    // Liên kết lỗi (thường là hết hạn hoặc đã dùng rồi) — không đăng nhập ai cả
+    showLinkError(LINK.errorCode === 'otp_expired'
+      ? 'Liên kết khôi phục đã hết hạn hoặc đã được dùng. Mỗi liên kết chỉ dùng được một lần. Hãy gửi lại email khôi phục.'
+      : 'Liên kết khôi phục không hợp lệ. Hãy gửi lại email khôi phục.');
+  }
   sb.auth.getSession().then(function(res){
     var s = res.data && res.data.session;
+    if (LINK.hasError) return;
+    if (LINK.isRecovery) {
+      // Thư viện đã kiểm tra token với Supabase; có phiên hợp lệ → cho đặt mật khẩu, không thì báo lỗi
+      if (s && !recoveryMode) enterRecovery();
+      else if (!s) showLinkError('Liên kết khôi phục không hợp lệ hoặc đã hết hạn. Hãy gửi lại email khôi phục.');
+      return;
+    }
+    if (recoveryMode) return;
+    if (LINK.hasAny) cleanUrl();
     state.user = s ? s.user : null; setUserBar();
     if (state.user) openList(); else go('viewLogin');
-  }).catch(function(){ go('viewLogin'); });
-  sb.auth.onAuthStateChange(function(event, session){
-    if (event === 'SIGNED_OUT') { state.user = null; setUserBar(); go('viewLogin'); }
+  }).catch(function(){
+    if (LINK.isRecovery) showLinkError('Liên kết khôi phục không hợp lệ hoặc đã hết hạn. Hãy gửi lại email khôi phục.');
+    else go('viewLogin');
   });
 </script>
 </body>
