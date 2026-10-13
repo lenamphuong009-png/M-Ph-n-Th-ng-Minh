@@ -85,6 +85,16 @@
   .busy{font-size:13px;color:var(--brass);}
   .link-box{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:0.4rem;}
   .link-box code{background:var(--paper-deep);padding:3px 8px;border-radius:2px;font-size:12.5px;overflow-wrap:anywhere;}
+  .gb-tabs{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:0.8rem;}
+  .gb-tab{border:1px solid var(--line);background:var(--paper);border-radius:2px;padding:0.35rem 0.75rem;font-family:inherit;font-size:13px;color:var(--ink-soft);cursor:pointer;}
+  .gb-tab.active{background:var(--ink);color:var(--paper);border-color:var(--ink);}
+  .gb-tab span{display:inline-block;min-width:1.4em;padding:0 5px;margin-left:4px;border-radius:9px;background:rgba(176,138,85,0.25);font-size:11.5px;text-align:center;}
+  .gb-item{border-top:1px solid var(--line);padding:0.75rem 0;}
+  .gb-item:first-child{border-top:none;}
+  .gb-text{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14.5px;}
+  .gb-meta{font-size:12px;color:var(--sage);margin-top:3px;}
+  .gb-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
+  .badge.pending{background:var(--brass);color:var(--ink);}
   .lightbox{position:fixed;inset:0;background:rgba(20,24,30,0.92);display:flex;align-items:center;justify-content:center;z-index:50;padding:1rem;}
   .lightbox img{max-width:100%;max-height:100%;object-fit:contain;}
   .lightbox button{position:absolute;top:12px;right:12px;}
@@ -267,6 +277,19 @@
       <div class="media-grid" id="vidGrid"></div>
     </div>
 
+    <div class="card" id="gbCard">
+      <h2>Sổ lưu bút</h2>
+      <div class="muted">Lời nhắn của khách viếng. Lời nhắn mới luôn ở trạng thái <b>Chờ duyệt</b>; chỉ lời nhắn <b>Đã duyệt</b> mới hiện trên trang công khai (khi trang đã xuất bản). "Xóa" là xóa vĩnh viễn — muốn tạm gỡ hãy dùng "Ẩn".</div>
+      <div class="gb-tabs" role="tablist">
+        <button type="button" class="gb-tab active" data-status="pending">Chờ duyệt <span id="gbCount-pending">0</span></button>
+        <button type="button" class="gb-tab" data-status="approved">Đã duyệt <span id="gbCount-approved">0</span></button>
+        <button type="button" class="gb-tab" data-status="hidden">Đã ẩn <span id="gbCount-hidden">0</span></button>
+        <button type="button" class="btn small" id="gbReload">Tải lại</button>
+      </div>
+      <div class="msg" id="gbMsg" role="alert"></div>
+      <div id="gbList"></div>
+    </div>
+
     <div class="sticky">
       <div class="status" id="saveStatus">Chưa có thay đổi.</div>
       <button type="button" class="btn primary" id="saveBtn">Lưu nháp</button>
@@ -368,7 +391,8 @@
     throw e;
   }
 
-  var state = { user: null, canCreate: false, graves: [], cur: null, media: [], dirty: false };
+  var state = { user: null, canCreate: false, graves: [], cur: null, media: [], dirty: false,
+                pendingByGrave: {}, gb: [], gbFilter: 'pending' };
 
   // ===== ĐIỀU HƯỚNG =====
   function go(view){
@@ -427,8 +451,18 @@
     }).then(function(res){
       if (res.error) throw res.error;
       state.graves = res.data || [];
+      state.pendingByGrave = {};
       renderList();
       setMsg($('listMsg'), '');
+      // Đếm lời nhắn chờ duyệt (không chặn danh sách nếu lỗi)
+      if (!state.graves.length) return;
+      return sb.from('guestbook_entries').select('grave_id').eq('status', 'pending')
+        .in('grave_id', state.graves.map(function(g){ return g.id; })).limit(5000)
+        .then(function(r){
+          if (r.error) { console.warn('[quanly] không đếm được lời nhắn chờ duyệt', r.error.message); return; }
+          (r.data || []).forEach(function(x){ state.pendingByGrave[x.grave_id] = (state.pendingByGrave[x.grave_id] || 0) + 1; });
+          renderList();
+        });
     }).catch(function(err){ setMsg($('listMsg'), friendly(err), 'err'); });
   }
   function renderList(){
@@ -451,7 +485,10 @@
       edit.addEventListener('click', function(){ openEditor(g.id); });
       var view = document.createElement('a'); view.className = 'btn small'; view.target = '_blank'; view.rel = 'noopener';
       view.href = pageUrl(g.memorial_slug, !g.is_published); view.textContent = g.is_published ? 'Mở trang' : 'Xem trước';
-      row.appendChild(info); row.appendChild(b); row.appendChild(edit); row.appendChild(view);
+      row.appendChild(info); row.appendChild(b);
+      var pend = state.pendingByGrave[g.id] || 0;
+      if (pend) { var pb = document.createElement('span'); pb.className = 'badge pending'; pb.textContent = pend + ' lời nhắn chờ duyệt'; row.appendChild(pb); }
+      row.appendChild(edit); row.appendChild(view);
       box.appendChild(row);
     });
   }
@@ -503,6 +540,8 @@
       fillForm();
       markSaved('Đã tải bản lưu gần nhất.');
       setMsg($('editMsg'), '');
+      state.gb = []; state.gbFilter = 'pending'; renderGuestbookAdmin();
+      loadGuestbook(false);
       return loadMedia();
     }).catch(function(err){ setMsg($('editMsg'), friendly(err), 'err'); });
   }
@@ -796,6 +835,77 @@
   $('lightboxClose').addEventListener('click', function(){ show($('lightbox'), false); $('lightboxImg').src = ''; });
   $('lightbox').addEventListener('click', function(e){ if (e.target === this) { show(this, false); $('lightboxImg').src = ''; } });
   document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && !$('lightbox').hidden) { show($('lightbox'), false); } });
+
+  // ===== SỔ LƯU BÚT: xem, duyệt, ẩn, xóa =====
+  // Đọc: RLS chỉ trả lời nhắn của trang tài khoản này quản lý (gb_select_mgr).
+  // Duyệt/ẩn/xóa: CHỈ qua hàm moderate_guestbook_entry — máy chủ kiểm quyền quản lý đúng trang;
+  // tài khoản không có quyền ghi trực tiếp vào bảng.
+  var GB_LABEL = { pending: 'Chờ duyệt', approved: 'Đã duyệt', hidden: 'Đã ẩn' };
+  function fmtTime(iso){
+    try { return new Date(iso).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }); }
+    catch (e) { return iso; }
+  }
+  function loadGuestbook(keepMsg){
+    if (!state.cur) return Promise.resolve();
+    var graveId = state.cur.id;
+    if (!keepMsg) setMsg($('gbMsg'), 'Đang tải lời nhắn…');
+    return sb.from('guestbook_entries').select('id, message, status, created_at, reviewed_at')
+      .eq('grave_id', graveId).order('created_at', { ascending: false }).limit(1000)
+      .then(function(res){
+        if (res.error) throw res.error;
+        if (!state.cur || state.cur.id !== graveId) return;   // đã chuyển sang trang khác
+        state.gb = res.data || [];
+        renderGuestbookAdmin();
+        if (!keepMsg) setMsg($('gbMsg'), '');
+      }).catch(function(err){ setMsg($('gbMsg'), 'Không tải được lời nhắn: ' + friendly(err), 'err'); });
+  }
+  function renderGuestbookAdmin(){
+    ['pending', 'approved', 'hidden'].forEach(function(s){
+      $('gbCount-' + s).textContent = state.gb.filter(function(x){ return x.status === s; }).length;
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.gb-tab'), function(b){
+      b.classList.toggle('active', b.getAttribute('data-status') === state.gbFilter);
+    });
+    var box = $('gbList'); box.textContent = '';
+    var items = state.gb.filter(function(x){ return x.status === state.gbFilter; });
+    if (!items.length) {
+      var p = document.createElement('div'); p.className = 'muted'; p.style.marginTop = '0.6rem';
+      p.textContent = 'Không có lời nhắn nào ở mục "' + GB_LABEL[state.gbFilter] + '".';
+      box.appendChild(p); return;
+    }
+    items.forEach(function(x){
+      var it = document.createElement('div'); it.className = 'gb-item';
+      var t = document.createElement('div'); t.className = 'gb-text'; t.textContent = x.message;   // văn bản thuần
+      var meta = document.createElement('div'); meta.className = 'gb-meta';
+      meta.textContent = 'Gửi lúc ' + fmtTime(x.created_at) + (x.reviewed_at ? ' · Xử lý lúc ' + fmtTime(x.reviewed_at) : '');
+      var act = document.createElement('div'); act.className = 'gb-actions';
+      function btn(label, cls, action){
+        var b = document.createElement('button'); b.type = 'button'; b.className = 'btn small ' + (cls || ''); b.textContent = label;
+        b.addEventListener('click', function(){ moderate(x, action, b); });
+        act.appendChild(b);
+      }
+      if (x.status !== 'approved') btn('Duyệt', 'primary', 'approve');
+      if (x.status !== 'hidden') btn('Ẩn', '', 'hide');
+      btn('Xóa', 'danger', 'delete');
+      it.appendChild(t); it.appendChild(meta); it.appendChild(act);
+      box.appendChild(it);
+    });
+  }
+  function moderate(x, action, button){
+    if (action === 'delete' && !confirm('Xóa VĨNH VIỄN lời nhắn này? Không thể khôi phục. (Muốn tạm gỡ, hãy dùng "Ẩn".)')) return;
+    button.disabled = true;
+    setMsg($('gbMsg'), 'Đang xử lý…');
+    sb.rpc('moderate_guestbook_entry', { p_id: x.id, p_action: action }).then(function(res){
+      if (res.error) throw res.error;
+      var done = { approved: 'Đã duyệt — lời nhắn sẽ hiện trên trang công khai (khi trang đã xuất bản).', hidden: 'Đã ẩn lời nhắn.', deleted: 'Đã xóa lời nhắn.' }[res.data];
+      setMsg($('gbMsg'), done || 'Đã xử lý.', 'ok');
+    }).catch(function(err){ setMsg($('gbMsg'), friendly(err), 'err'); })
+      .then(function(){ return loadGuestbook(true); });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('.gb-tab'), function(b){
+    b.addEventListener('click', function(){ state.gbFilter = b.getAttribute('data-status'); renderGuestbookAdmin(); });
+  });
+  $('gbReload').addEventListener('click', function(){ loadGuestbook(false); });
 
   // ===== QUÊN MẬT KHẨU =====
   function authErrText(err){

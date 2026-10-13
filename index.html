@@ -137,6 +137,9 @@
   .msg-form input{flex:1;border:1px solid var(--line);background:transparent;border-radius:2px;padding:0.7rem 0.8rem;font-family:'Be Vietnam Pro',sans-serif;font-size:14px;color:var(--ink);}
   .msg-form input:focus{outline:none;border-color:var(--brass);}
   .msg-form button{border:1px solid var(--ink);background:none;border-radius:2px;padding:0 1.1rem;font-family:'Be Vietnam Pro',sans-serif;font-size:14px;color:var(--ink);cursor:pointer;}
+  .msg-form button:disabled{opacity:0.55;cursor:default;}
+  .msg-status{margin-top:0.75rem;font-size:13px;color:var(--sage);}
+  .msg-status.err{color:#B0553F;}
 
   footer{text-align:center;padding:3rem 1.5rem 3.5rem;color:var(--sage);font-size:13px;max-width:none;}
   footer .mark{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:15px;color:var(--brass);margin-top:0.5rem;}
@@ -267,16 +270,17 @@
   </div>
 </section>
 
-<section class="reveal" hidden>
+<section class="reveal" id="secGuestbook" hidden>
   <div class="eyebrow">Sổ lưu bút</div>
   <h2>Lời nhắn</h2>
   <div id="msgList">
     <div class="msg"><div class="msg-name">Người thân</div><div class="msg-text">Chưa có lời nhắn nào — hãy là người đầu tiên chia sẻ kỷ niệm về ông.</div></div>
   </div>
   <div class="msg-form">
-    <input type="text" id="msgInput" placeholder="Viết vài dòng tưởng nhớ...">
+    <input type="text" id="msgInput" placeholder="Viết vài dòng tưởng nhớ..." maxlength="1000">
     <button id="sendMsg">Gửi</button>
   </div>
+  <div class="msg-status" id="msgStatus" role="status" aria-live="polite" hidden></div>
 </section>
 
 <footer>
@@ -317,15 +321,13 @@
   var msgInput = document.getElementById('msgInput');
   var sendMsg = document.getElementById('sendMsg');
   var msgList = document.getElementById('msgList');
+  // Nút Gửi: ghi lời nhắn THẬT qua hàm post_guestbook_entry (xem khối SỔ LƯU BÚT bên dưới).
+  // Không còn chỉ thêm vào trang đang mở (cách cũ mất khi tải lại).
   sendMsg.addEventListener('click', function(){
-    var val = msgInput.value.trim();
-    if(!val) return;
-    var div = document.createElement('div');
-    div.className = 'msg';
-    div.innerHTML = '<div class="msg-name">Khách viếng</div><div class="msg-text"></div>';
-    div.querySelector('.msg-text').textContent = val;
-    msgList.appendChild(div);
-    msgInput.value = '';
+    if (typeof submitGuestbook === 'function') submitGuestbook();
+  });
+  msgInput.addEventListener('keydown', function(e){
+    if (e.key === 'Enter' && typeof submitGuestbook === 'function') { e.preventDefault(); submitGuestbook(); }
   });
 
   // ===== GHI ÂM KỶ NIỆM =====
@@ -888,6 +890,80 @@
     });
   })();
 
+  // ===== SỔ LƯU BÚT (bảng guestbook_entries + hàm post_guestbook_entry) =====
+  // Khách chỉ đọc được lời nhắn ĐÃ DUYỆT của trang ĐÃ XUẤT BẢN (RLS). Khách không có quyền đọc cột
+  // status nên KHÔNG được lọc theo status khi là khách; chỉ ở chế độ xem trước (người quản lý, thấy cả
+  // lời nhắn chờ duyệt) mới thêm điều kiện status = approved để giống hệt những gì khách thấy.
+  // Mục này còn ẨN với khách cho tới khi kiểm thử đầu cuối đạt: chỉ hiện khi ?preview=1 hoặc ?kiem-thu=1.
+  var GB_VISIBLE = IS_PREVIEW || new URLSearchParams(window.location.search).get('kiem-thu') === '1';
+  var GB_MAX = 1000;
+  var gbHonorific = '';
+  var gbPending = false;
+  var gbLastSent = '';
+
+  function setGbStatus(text, isErr){
+    var el = $('msgStatus');
+    el.textContent = text || '';
+    el.className = 'msg-status' + (isErr ? ' err' : '');
+    show(el, !!text);
+  }
+  function gbEmptyText(){
+    return 'Chưa có lời nhắn nào — hãy là người đầu tiên chia sẻ kỷ niệm về ' + (gbHonorific || 'ông') + '.';
+  }
+  function renderGuestbook(rows){
+    msgList.textContent = '';
+    if (!rows.length) {
+      var box = document.createElement('div'); box.className = 'msg';
+      var n = document.createElement('div'); n.className = 'msg-name'; n.textContent = 'Người thân';
+      var t = document.createElement('div'); t.className = 'msg-text'; t.textContent = gbEmptyText();
+      box.appendChild(n); box.appendChild(t); msgList.appendChild(box);
+      return;
+    }
+    rows.forEach(function(r){
+      var box = document.createElement('div'); box.className = 'msg';
+      var n = document.createElement('div'); n.className = 'msg-name'; n.textContent = 'Khách viếng';
+      var t = document.createElement('div'); t.className = 'msg-text'; t.textContent = r.message; // văn bản thuần
+      box.appendChild(n); box.appendChild(t); msgList.appendChild(box);
+    });
+  }
+  function loadGuestbook(graveId){
+    var q = getClient().from('guestbook_entries').select('id, message, created_at').eq('grave_id', graveId);
+    if (IS_PREVIEW) q = q.eq('status', 'approved');
+    return q.order('created_at', { ascending: true }).limit(500).then(function(res){
+      if (res.error) throw res.error;
+      renderGuestbook((res.data || []).filter(function(r){ return r && isText(r.message); }));
+    });
+  }
+  function gbErrorText(err){
+    var m = (err && err.message) || '';
+    if (/GB_EMPTY/.test(m)) return 'Vui lòng viết vài dòng trước khi gửi.';
+    if (/GB_TOO_LONG/.test(m)) return 'Lời nhắn dài quá ' + GB_MAX + ' ký tự. Vui lòng rút gọn.';
+    if (/GB_DUPLICATE/.test(m)) return 'Lời nhắn này đã được gửi trước đó và đang chờ gia đình duyệt.';
+    if (/GB_RATE_LIMIT/.test(m)) return 'Bạn vừa gửi khá nhiều lời nhắn. Vui lòng thử lại sau ít phút.';
+    if (/GB_QUEUE_FULL/.test(m)) return 'Sổ lưu bút đang tạm ngừng nhận lời nhắn mới. Vui lòng quay lại sau.';
+    if (/GB_NOT_FOUND/.test(m)) return IS_PREVIEW ? 'Trang chưa xuất bản nên chưa nhận lời nhắn.' : 'Trang này hiện không nhận lời nhắn.';
+    return 'Chưa gửi được lời nhắn do lỗi kết nối. Vui lòng thử lại.';
+  }
+  function submitGuestbook(){
+    if (gbPending || !currentSlug) return;
+    var val = msgInput.value.trim();
+    if (!val) { setGbStatus('Vui lòng viết vài dòng trước khi gửi.', true); return; }
+    if (val.length > GB_MAX) { setGbStatus('Lời nhắn dài quá ' + GB_MAX + ' ký tự. Vui lòng rút gọn.', true); return; }
+    if (val.toLowerCase() === gbLastSent) { setGbStatus('Lời nhắn này đã được gửi và đang chờ gia đình duyệt.', false); return; }
+    gbPending = true; sendMsg.disabled = true; setGbStatus('Đang gửi…', false);
+    var req = getClient().rpc('post_guestbook_entry', { p_slug: currentSlug, p_message: val });
+    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') req = req.abortSignal(AbortSignal.timeout(15000));
+    Promise.resolve(req).then(function(res){
+      if (res.error) throw res.error;
+      gbLastSent = val.toLowerCase();
+      msgInput.value = '';
+      setGbStatus('Cảm ơn bạn. Lời nhắn đã được gửi và sẽ hiển thị sau khi gia đình duyệt.', false);
+    }).catch(function(err){
+      console.error('[memorial] gửi lời nhắn thất bại:', err && err.message);
+      setGbStatus(gbErrorText(err), true);   // giữ nguyên nội dung trong ô để người viết không mất chữ
+    }).then(function(){ gbPending = false; sendMsg.disabled = false; });
+  }
+
   var STATE_TEXT = {
     loading: 'Đang tải trang tưởng niệm…',
     notfound: 'Không tìm thấy trang tưởng niệm.',
@@ -923,6 +999,15 @@
         ? 'BẢN XEM TRƯỚC — trang này ĐÃ xuất bản; khách đang thấy nội dung đã lưu.'
         : 'BẢN XEM TRƯỚC — trang đang là NHÁP, chỉ người quản lý thấy. Khách chưa xem được.';
       showState('ready');
+      if (GB_VISIBLE) {
+        gbHonorific = m.honorific;
+        renderGuestbook([]);
+        show($('secGuestbook'), true);
+        loadGuestbook(m.id).catch(function(err){
+          console.error('[memorial] tải sổ lưu bút thất bại:', err && err.message);
+          setGbStatus('Chưa tải được lời nhắn. Vui lòng tải lại trang.', true);
+        });
+      }
       loadMedia(m.id).then(function(items){
         renderGallery(items);
         renderVideos(items);
