@@ -118,8 +118,12 @@ begin
   if char_length(v_msg) < 1 then raise exception 'GB_EMPTY: lời nhắn trống'; end if;
   if char_length(v_msg) > 1000 then raise exception 'GB_TOO_LONG: lời nhắn quá 1000 ký tự'; end if;
 
+  -- IP người gửi (chỉ để băm chống spam). Ưu tiên header do hạ tầng đặt (khó giả mạo hơn),
+  -- cuối cùng mới dùng x-forwarded-for. Giới hạn theo trang (30/10 phút) là lớp chặn cứng.
   begin
-    v_ip := split_part(coalesce(current_setting('request.headers', true)::json ->> 'x-forwarded-for', ''), ',', 1);
+    v_ip := coalesce(nullif(current_setting('request.headers', true)::json ->> 'cf-connecting-ip', ''),
+                     nullif(current_setting('request.headers', true)::json ->> 'x-real-ip', ''),
+                     split_part(coalesce(current_setting('request.headers', true)::json ->> 'x-forwarded-for', ''), ',', 1));
   exception when others then v_ip := '';
   end;
   v_hash := case when btrim(v_ip) <> '' then md5(btrim(v_ip) || '|' || v_grave::text || '|tn-guestbook') end;
