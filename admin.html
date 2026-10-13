@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Quản lý Tưởng niệm số — Phyverse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Be+Vietnam+Pro:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1C232D; --ink-soft:#2A3341; --paper:#F4EEE2; --paper-deep:#EAE1CF;
+    --brass:#B08A55; --brass-light:#D3B583; --sage:#6E7F6C;
+    --line:rgba(28,35,45,0.18); --danger:#B0553F; --ok:#4F6B4C;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:'Be Vietnam Pro',sans-serif;font-weight:300;line-height:1.6;}
+  [hidden]{display:none !important;}
+  .topbar{background:var(--ink);color:var(--paper);padding:0.9rem 1.25rem;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .topbar .brand{font-family:'Cormorant Garamond',serif;font-size:21px;font-weight:500;}
+  .topbar .brand small{font-family:'Be Vietnam Pro',sans-serif;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--brass-light);margin-left:8px;}
+  .topbar .spacer{flex:1;}
+  .topbar .who{font-size:12.5px;color:rgba(244,238,226,0.7);overflow-wrap:anywhere;}
+  .topbar button{background:none;border:1px solid rgba(244,238,226,0.35);color:var(--paper);border-radius:2px;padding:0.35rem 0.8rem;font-family:inherit;font-size:12.5px;cursor:pointer;}
+  .env{font-size:11px;letter-spacing:0.1em;text-transform:uppercase;background:var(--brass);color:var(--ink);padding:2px 8px;border-radius:2px;font-weight:500;}
+  main{max-width:820px;margin:0 auto;padding:2rem 1rem 5rem;}
+  h1,h2,h3{font-family:'Cormorant Garamond',serif;font-weight:500;margin:0;}
+  h1{font-size:30px;}
+  h2{font-size:23px;margin-bottom:0.25rem;}
+  .muted{color:var(--sage);font-size:13.5px;}
+  .card{background:#FBF8F2;border:1px solid var(--line);border-radius:4px;padding:1.25rem;margin-top:1.25rem;}
+  label.f{display:block;font-size:13px;font-weight:500;margin:0.9rem 0 0.3rem;}
+  label.f .hint{font-weight:300;color:var(--sage);margin-left:4px;}
+  input[type=text],input[type=email],input[type=password],textarea{width:100%;border:1px solid var(--line);background:var(--paper);border-radius:2px;padding:0.6rem 0.7rem;font-family:inherit;font-size:14.5px;color:var(--ink);}
+  textarea{resize:vertical;min-height:90px;}
+  input:focus,textarea:focus{outline:none;border-color:var(--brass);}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px;}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;font-family:inherit;font-size:14px;font-weight:500;border-radius:2px;padding:0.6rem 1.1rem;cursor:pointer;border:1px solid var(--ink);background:none;color:var(--ink);text-decoration:none;}
+  .btn.primary{background:var(--ink);color:var(--paper);}
+  .btn.brass{background:var(--brass);border-color:var(--brass);color:var(--ink);}
+  .btn.danger{border-color:var(--danger);color:var(--danger);}
+  .btn.small{font-size:12.5px;padding:0.35rem 0.7rem;}
+  .btn:disabled{opacity:0.55;cursor:default;}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:1rem;}
+  .msg{font-size:13.5px;margin-top:0.75rem;min-height:1.2em;}
+  .msg.err{color:var(--danger);} .msg.ok{color:var(--ok);}
+  .login{max-width:400px;margin:3rem auto;}
+  .list-item{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line);padding:0.9rem 0;}
+  .list-item:first-child{border-top:none;}
+  .list-item .name{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:500;}
+  .list-item .slug{font-size:12.5px;color:var(--sage);overflow-wrap:anywhere;}
+  .list-item .grow{flex:1 1 220px;min-width:0;}
+  .badge{font-size:11px;letter-spacing:0.08em;text-transform:uppercase;padding:2px 8px;border-radius:2px;font-weight:500;}
+  .badge.draft{background:var(--paper-deep);color:var(--ink-soft);border:1px dashed var(--line);}
+  .badge.pub{background:var(--ok);color:#fff;}
+  .editor-head{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;}
+  .editor-head .grow{flex:1 1 260px;min-width:0;}
+  .sticky{position:sticky;bottom:0;background:rgba(244,238,226,0.97);border-top:1px solid var(--line);padding:0.75rem 1rem;margin:2rem -1rem 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;z-index:5;}
+  .sticky .status{flex:1 1 180px;font-size:13px;color:var(--sage);}
+  .sticky .status.dirty{color:var(--danger);}
+  .rep{border:1px solid var(--line);border-radius:3px;padding:0.75rem;margin-top:0.6rem;background:var(--paper);}
+  .rep-top{display:flex;gap:8px;align-items:center;}
+  .rep-top input{flex:1;}
+  .rep-tools{display:flex;gap:4px;flex:none;}
+  .rep-tools button{border:1px solid var(--line);background:none;border-radius:2px;width:32px;height:32px;cursor:pointer;font-size:13px;color:var(--ink-soft);}
+  .rep textarea{min-height:60px;margin-top:6px;}
+  .portrait{display:flex;gap:16px;align-items:center;flex-wrap:wrap;}
+  .portrait .ph{width:110px;height:110px;border-radius:50%;background:var(--ink);border:1px solid var(--brass-light);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none;}
+  .portrait .ph img{width:100%;height:100%;object-fit:cover;}
+  .portrait .ph span{font-family:'Cormorant Garamond',serif;font-size:38px;color:var(--brass-light);}
+  .media-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-top:0.8rem;}
+  .m-item{border:1px solid var(--line);border-radius:3px;background:var(--paper);overflow:hidden;display:flex;flex-direction:column;}
+  .m-item .thumb{aspect-ratio:1;background:var(--paper-deep);display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .m-item .thumb img{width:100%;height:100%;object-fit:cover;cursor:zoom-in;}
+  .m-item .thumb video{width:100%;height:100%;object-fit:contain;background:#000;}
+  .m-item .thumb .broken{font-size:12px;color:var(--danger);padding:0.5rem;text-align:center;}
+  .m-item .body{padding:0.5rem;display:flex;flex-direction:column;gap:6px;}
+  .m-item .body input{font-size:13px;padding:0.4rem 0.5rem;}
+  .m-item .tools{display:flex;gap:4px;flex-wrap:wrap;}
+  .m-item .tools button{border:1px solid var(--line);background:none;border-radius:2px;padding:0.25rem 0.5rem;cursor:pointer;font-family:inherit;font-size:12px;color:var(--ink-soft);}
+  .m-item .tools button.del{color:var(--danger);border-color:rgba(176,85,63,0.4);}
+  .upload-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:0.6rem;}
+  .upload-row input[type=file]{font-size:13px;font-family:inherit;max-width:100%;}
+  .busy{font-size:13px;color:var(--brass);}
+  .link-box{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:0.4rem;}
+  .link-box code{background:var(--paper-deep);padding:3px 8px;border-radius:2px;font-size:12.5px;overflow-wrap:anywhere;}
+  .lightbox{position:fixed;inset:0;background:rgba(20,24,30,0.92);display:flex;align-items:center;justify-content:center;z-index:50;padding:1rem;}
+  .lightbox img{max-width:100%;max-height:100%;object-fit:contain;}
+  .lightbox button{position:absolute;top:12px;right:12px;}
+  @media (max-width:560px){
+    .row2{grid-template-columns:1fr;}
+    h1{font-size:26px;}
+    main{padding:1.25rem 0.85rem 5rem;}
+    .sticky{margin-left:-0.85rem;margin-right:-0.85rem;padding:0.65rem 0.85rem;}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">Tưởng niệm số<small>Quản lý</small></div>
+  <span class="env" id="envBadge">Staging</span>
+  <div class="spacer"></div>
+  <div class="who" id="whoText" hidden></div>
+  <button type="button" id="logoutBtn" hidden>Đăng xuất</button>
+</div>
+
+<main>
+  <div id="bootMsg" class="muted">Đang khởi động…</div>
+
+  <!-- ĐĂNG NHẬP -->
+  <section id="viewLogin" class="login" hidden>
+    <h1>Đăng nhập</h1>
+    <p class="muted">Dành cho người quản lý trang tưởng niệm. Khách viếng không cần đăng nhập.</p>
+    <div class="card">
+      <form id="loginForm" autocomplete="on">
+        <label class="f" for="loginEmail">Email</label>
+        <input type="email" id="loginEmail" autocomplete="username" required>
+        <label class="f" for="loginPassword">Mật khẩu</label>
+        <input type="password" id="loginPassword" autocomplete="current-password" required>
+        <div class="actions"><button class="btn primary" type="submit" id="loginBtn">Đăng nhập</button></div>
+        <div class="msg" id="loginMsg" role="alert"></div>
+      </form>
+    </div>
+  </section>
+
+  <!-- DANH SÁCH -->
+  <section id="viewList" hidden>
+    <h1>Trang tưởng niệm của bạn</h1>
+    <p class="muted">Chỉ hiển thị các trang mà tài khoản này được cấp quyền quản lý.</p>
+
+    <div class="card" id="createCard" hidden>
+      <h2>Tạo trang mới</h2>
+      <p class="muted">Trang mới luôn ở trạng thái <b>Nháp</b> — khách chưa xem được cho tới khi bạn bấm Xuất bản.</p>
+      <form id="createForm">
+        <label class="f" for="newName">Họ và tên người đã khuất</label>
+        <input type="text" id="newName" maxlength="200" required>
+        <label class="f" for="newSlug">Đường dẫn riêng <span class="hint">(chữ thường không dấu, số, dấu gạch ngang — không đổi được sau khi tạo)</span></label>
+        <input type="text" id="newSlug" maxlength="100" required pattern="[a-z0-9]+(-[a-z0-9]+)*">
+        <div class="muted" id="newSlugPreview"></div>
+        <div class="actions"><button class="btn primary" type="submit" id="createBtn">Tạo trang</button></div>
+        <div class="msg" id="createMsg" role="alert"></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <div id="listBox"></div>
+      <div class="msg" id="listMsg" role="alert"></div>
+    </div>
+  </section>
+
+  <!-- CHỈNH SỬA -->
+  <section id="viewEdit" hidden>
+    <div class="editor-head">
+      <div class="grow">
+        <a href="#" id="backLink" class="muted">← Danh sách trang</a>
+        <h1 id="edTitle"></h1>
+        <div class="muted">Trạng thái: <span class="badge" id="edBadge"></span></div>
+        <div class="link-box"><span class="muted">Đường dẫn công khai:</span><code id="edLink"></code><button type="button" class="btn small" id="copyLinkBtn">Sao chép</button></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Thông tin chính</h2>
+      <label class="f" for="fName">Họ và tên</label>
+      <input type="text" id="fName" maxlength="200">
+      <div class="row2">
+        <div><label class="f" for="fSaint">Tên thánh / pháp danh <span class="hint">(không bắt buộc)</span></label><input type="text" id="fSaint" maxlength="100"></div>
+        <div><label class="f" for="fHonorific">Cách xưng hô <span class="hint">(VD: ông, bà, cụ)</span></label><input type="text" id="fHonorific" maxlength="30"></div>
+      </div>
+      <div class="row2">
+        <div><label class="f" for="fBirth">Năm / ngày sinh</label><input type="text" id="fBirth" maxlength="50" placeholder="VD: 1961 hoặc 12/03/1961"></div>
+        <div><label class="f" for="fDeath">Năm / ngày mất</label><input type="text" id="fDeath" maxlength="50" placeholder="VD: 2021"></div>
+      </div>
+      <label class="f" for="fEpigraph">Câu trích dẫn đầu trang <span class="hint">(tối đa 500 ký tự)</span></label>
+      <textarea id="fEpigraph" maxlength="500" style="min-height:60px"></textarea>
+      <label class="f" for="fIntro">Tiểu sử / lời giới thiệu <span class="hint">(tối đa 3000 ký tự)</span></label>
+      <textarea id="fIntro" maxlength="3000" style="min-height:140px"></textarea>
+      <label class="f" for="fFooter">Dòng ghi chú cuối trang <span class="hint">(tối đa 300 ký tự)</span></label>
+      <input type="text" id="fFooter" maxlength="300">
+    </div>
+
+    <div class="card">
+      <h2>Ảnh chân dung</h2>
+      <div class="portrait">
+        <div class="ph" id="portraitBox"><span id="portraitInitial"></span></div>
+        <div>
+          <div class="upload-row">
+            <input type="file" id="portraitFile" accept="image/jpeg,image/png,image/webp">
+            <button type="button" class="btn small" id="portraitBtn">Tải ảnh chân dung</button>
+          </div>
+          <div class="muted">JPG, PNG hoặc WebP, tối đa 10MB. Ảnh mới thay ảnh cũ ngay khi tải xong.</div>
+          <div class="msg" id="portraitMsg" role="alert"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Những dấu mốc cuộc đời</h2>
+      <div class="muted">Tối đa 50 mốc. Mốc để trống nội dung sẽ bị bỏ qua khi lưu.</div>
+      <div id="tlList"></div>
+      <div class="actions"><button type="button" class="btn small" id="tlAdd">+ Thêm mốc</button></div>
+    </div>
+
+    <div class="card">
+      <h2>Di nguyện / lời nhắn lại</h2>
+      <div class="muted">Tối đa 20 mục.</div>
+      <div id="wsList"></div>
+      <div class="actions"><button type="button" class="btn small" id="wsAdd">+ Thêm di nguyện</button></div>
+    </div>
+
+    <div class="card">
+      <h2>Album ảnh</h2>
+      <div class="muted">JPG, PNG hoặc WebP, tối đa 10MB mỗi ảnh. Có thể chọn nhiều ảnh một lần. Ảnh được lưu ngay khi tải lên.</div>
+      <div class="upload-row">
+        <input type="file" id="imgFiles" accept="image/jpeg,image/png,image/webp" multiple>
+        <button type="button" class="btn small" id="imgUploadBtn">Tải ảnh lên</button>
+        <span class="busy" id="imgBusy"></span>
+      </div>
+      <div class="msg" id="imgMsg" role="alert"></div>
+      <div class="media-grid" id="imgGrid"></div>
+    </div>
+
+    <div class="card">
+      <h2>Video</h2>
+      <div class="muted">MP4, WebM hoặc MOV, tối đa 50MB mỗi video (giới hạn của kho lưu trữ hiện tại). Video dài nên nén trước khi tải.</div>
+      <div class="upload-row">
+        <input type="file" id="vidFile" accept="video/mp4,video/webm,video/quicktime">
+        <button type="button" class="btn small" id="vidUploadBtn">Tải video lên</button>
+        <span class="busy" id="vidBusy"></span>
+      </div>
+      <div class="msg" id="vidMsg" role="alert"></div>
+      <div class="media-grid" id="vidGrid"></div>
+    </div>
+
+    <div class="sticky">
+      <div class="status" id="saveStatus">Chưa có thay đổi.</div>
+      <button type="button" class="btn primary" id="saveBtn">Lưu nháp</button>
+      <button type="button" class="btn" id="previewBtn">Xem trước</button>
+      <button type="button" class="btn brass" id="publishBtn">Xuất bản</button>
+    </div>
+    <div class="msg" id="editMsg" role="alert"></div>
+  </section>
+</main>
+
+<div class="lightbox" id="lightbox" hidden><img id="lightboxImg" alt=""><button type="button" class="btn primary small" id="lightboxClose">Đóng ✕</button></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"
+        integrity="sha384-BWcjm9OdFth9TbhCxZPdm+gAOUMAzQy9nmTs12ioXdCcbVnJaPMn+fMUoQCLt60R"
+        crossorigin="anonymous"></script>
+<script>
+  // ===== CẤU HÌNH — STAGING =====
+  // Chỉ dùng publishable key (công khai). Quyền thật do RLS/Storage policy trên Supabase quyết định.
+  // KHÔNG BAO GIỜ đặt service_role / secret key ở đây.
+  var CFG = {
+    url: 'https://mhyadympadwxzuwwlnps.supabase.co',
+    key: 'sb_publishable_JmjzqnFPKcC2bQ2T4Kr9vQ_QoFzdXN1',
+    bucket: 'memorial-media',
+    storageKey: 'phy-tuongniem-quanly'   // index.html (?preview=1) dùng chung khóa này để đọc bản nháp
+  };
+  var LIMIT = { image: 10 * 1024 * 1024, video: 50 * 1024 * 1024 };
+  var MIME_EXT = { 'image/jpeg':'jpg', 'image/png':'png', 'image/webp':'webp',
+                   'video/mp4':'mp4', 'video/webm':'webm', 'video/quicktime':'mov' };
+  var SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+  function $(id){ return document.getElementById(id); }
+  function show(el, on){ el.hidden = !on; }
+  function setMsg(el, text, kind){ el.textContent = text || ''; el.className = 'msg' + (kind ? ' ' + kind : ''); }
+  function trimOrNull(v){ v = (v || '').trim(); return v === '' ? null : v; }
+  function uuid(){
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    var b = crypto.getRandomValues(new Uint8Array(16)); b[6] = (b[6] & 15) | 64; b[8] = (b[8] & 63) | 128;
+    var h = Array.from(b, function(x){ return x.toString(16).padStart(2,'0'); }).join('');
+    return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);
+  }
+  function slugify(s){
+    return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g,'d').replace(/Đ/g,'d')
+      .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100).replace(/-+$/,'');
+  }
+  function initialOf(name){
+    var w = (name || '').normalize('NFC').trim().split(/\s+/);
+    return (Array.from(w[w.length - 1] || '')[0] || '').toLocaleUpperCase('vi');
+  }
+  function publicUrl(path){ return sb.storage.from(CFG.bucket).getPublicUrl(path).data.publicUrl; }
+  function pageUrl(slug, preview){
+    var u = new URL('index.html', window.location.href);
+    u.search = '?memorial=' + encodeURIComponent(slug) + (preview ? '&preview=1' : '');
+    return u.toString();
+  }
+  // Thông báo lỗi dễ hiểu — không lộ chi tiết kỹ thuật thừa
+  function friendly(err){
+    var code = err && (err.code || err.statusCode || '');
+    var m = (err && err.message) || '';
+    if (code === '23505') return 'Đường dẫn này đã có trang khác sử dụng. Hãy chọn đường dẫn khác.';
+    if (code === '23514') return 'Dữ liệu không hợp lệ (quá dài hoặc sai định dạng). Kiểm tra lại các ô.';
+    if (code === '42501' || /row-level security|permission|not authorized|Unauthorized/i.test(m)) return 'Tài khoản này không có quyền thực hiện thao tác này.';
+    if (/payload too large|exceeded the maximum|413/i.test(m) || code === '413') return 'Tệp quá lớn so với giới hạn cho phép.';
+    if (/fetch|network|Failed to fetch|timeout|aborted/i.test(m)) return 'Lỗi kết nối mạng. Dữ liệu đã lưu trước đó không bị ảnh hưởng — hãy thử lại.';
+    if (/JWT|session|expired/i.test(m)) return 'Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.';
+    return 'Có lỗi xảy ra: ' + (m || 'không rõ nguyên nhân') + '. Dữ liệu đã lưu trước đó không bị ảnh hưởng.';
+  }
+
+  var sb;
+  try {
+    sb = window.supabase.createClient(CFG.url, CFG.key, {
+      auth: { storageKey: CFG.storageKey, persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
+    });
+  } catch (e) {
+    $('bootMsg').textContent = 'Không nạp được thư viện kết nối. Kiểm tra mạng rồi tải lại trang.';
+    throw e;
+  }
+
+  var state = { user: null, canCreate: false, graves: [], cur: null, media: [], dirty: false };
+
+  // ===== ĐIỀU HƯỚNG =====
+  function go(view){
+    ['viewLogin','viewList','viewEdit'].forEach(function(v){ show($(v), v === view); });
+    show($('bootMsg'), false);
+    window.scrollTo(0, 0);
+  }
+  function setUserBar(){
+    var on = !!state.user;
+    show($('whoText'), on); show($('logoutBtn'), on);
+    $('whoText').textContent = on ? state.user.email : '';
+  }
+
+  // ===== ĐĂNG NHẬP =====
+  $('loginForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var btn = $('loginBtn'); btn.disabled = true; setMsg($('loginMsg'), 'Đang đăng nhập…');
+    sb.auth.signInWithPassword({ email: $('loginEmail').value.trim(), password: $('loginPassword').value })
+      .then(function(res){
+        if (res.error) {
+          setMsg($('loginMsg'), /Invalid login/i.test(res.error.message) ? 'Email hoặc mật khẩu không đúng.' : friendly(res.error), 'err');
+          return;
+        }
+        $('loginPassword').value = ''; setMsg($('loginMsg'), '');
+        state.user = res.data.user; setUserBar(); openList();
+      })
+      .catch(function(err){ setMsg($('loginMsg'), friendly(err), 'err'); })
+      .then(function(){ btn.disabled = false; });
+  });
+  $('logoutBtn').addEventListener('click', function(){
+    if (state.dirty && !confirm('Có thay đổi chưa lưu. Vẫn đăng xuất?')) return;
+    state.dirty = false;
+    sb.auth.signOut().then(function(){ state.user = null; setUserBar(); go('viewLogin'); });
+  });
+
+  // ===== DANH SÁCH =====
+  function openList(){
+    go('viewList');
+    setMsg($('listMsg'), 'Đang tải danh sách…');
+    $('listBox').textContent = '';
+    Promise.all([
+      sb.from('memorial_creators').select('user_id').maybeSingle(),
+      sb.from('grave_managers').select('grave_id, role, revoked_at, expires_at')
+    ]).then(function(rs){
+      if (rs[0].error) throw rs[0].error;
+      if (rs[1].error) throw rs[1].error;
+      state.canCreate = !!rs[0].data;
+      show($('createCard'), state.canCreate);
+      var now = Date.now();
+      var ids = (rs[1].data || []).filter(function(g){
+        return !g.revoked_at && (!g.expires_at || Date.parse(g.expires_at) > now);
+      }).map(function(g){ return g.grave_id; });
+      ids = ids.filter(function(v, i){ return ids.indexOf(v) === i; });
+      if (!ids.length) return { data: [] };
+      return sb.from('graves').select('id, memorial_slug, deceased_name, is_published').in('id', ids).order('deceased_name');
+    }).then(function(res){
+      if (res.error) throw res.error;
+      state.graves = res.data || [];
+      renderList();
+      setMsg($('listMsg'), '');
+    }).catch(function(err){ setMsg($('listMsg'), friendly(err), 'err'); });
+  }
+  function renderList(){
+    var box = $('listBox'); box.textContent = '';
+    if (!state.graves.length) {
+      var p = document.createElement('p'); p.className = 'muted';
+      p.textContent = state.canCreate ? 'Chưa có trang nào. Hãy tạo trang đầu tiên ở khung phía trên.'
+                                      : 'Tài khoản này chưa được cấp quyền quản lý trang nào. Liên hệ Phyverse để được cấp quyền.';
+      box.appendChild(p); return;
+    }
+    state.graves.forEach(function(g){
+      var row = document.createElement('div'); row.className = 'list-item';
+      var info = document.createElement('div'); info.className = 'grow';
+      var n = document.createElement('div'); n.className = 'name'; n.textContent = g.deceased_name;
+      var s = document.createElement('div'); s.className = 'slug'; s.textContent = '?memorial=' + g.memorial_slug;
+      info.appendChild(n); info.appendChild(s);
+      var b = document.createElement('span'); b.className = 'badge ' + (g.is_published ? 'pub' : 'draft');
+      b.textContent = g.is_published ? 'Đã xuất bản' : 'Nháp';
+      var edit = document.createElement('button'); edit.type = 'button'; edit.className = 'btn small primary'; edit.textContent = 'Sửa';
+      edit.addEventListener('click', function(){ openEditor(g.id); });
+      var view = document.createElement('a'); view.className = 'btn small'; view.target = '_blank'; view.rel = 'noopener';
+      view.href = pageUrl(g.memorial_slug, !g.is_published); view.textContent = g.is_published ? 'Mở trang' : 'Xem trước';
+      row.appendChild(info); row.appendChild(b); row.appendChild(edit); row.appendChild(view);
+      box.appendChild(row);
+    });
+  }
+
+  // ===== TẠO TRANG =====
+  var slugTouched = false;
+  $('newName').addEventListener('input', function(){ if (!slugTouched) { $('newSlug').value = slugify(this.value); updateSlugPreview(); } });
+  $('newSlug').addEventListener('input', function(){ slugTouched = this.value !== ''; this.value = this.value.toLowerCase(); updateSlugPreview(); });
+  function updateSlugPreview(){
+    var s = $('newSlug').value;
+    $('newSlugPreview').textContent = s ? ('Đường dẫn sẽ là: ' + pageUrl(s, false)) : '';
+  }
+  $('createForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var name = $('newName').value.trim(), slug = $('newSlug').value.trim();
+    if (!name) { setMsg($('createMsg'), 'Vui lòng nhập họ tên.', 'err'); return; }
+    if (slug.length < 3 || !SLUG_RE.test(slug)) { setMsg($('createMsg'), 'Đường dẫn chỉ gồm chữ thường không dấu, số và dấu gạch ngang (3–100 ký tự), không bắt đầu/kết thúc bằng gạch ngang.', 'err'); return; }
+    var btn = $('createBtn'); btn.disabled = true; setMsg($('createMsg'), 'Đang tạo…');
+    sb.rpc('create_memorial', { p_slug: slug, p_name: name }).then(function(res){
+      if (res.error) throw res.error;
+      $('newName').value = ''; $('newSlug').value = ''; slugTouched = false; updateSlugPreview();
+      setMsg($('createMsg'), 'Đã tạo trang (Nháp).', 'ok');
+      openEditor(res.data);
+    }).catch(function(err){ setMsg($('createMsg'), friendly(err), 'err'); })
+      .then(function(){ btn.disabled = false; });
+  });
+
+  // ===== CHỈNH SỬA =====
+  var GRAVE_EDIT_COLS = 'id, memorial_slug, deceased_name, saint_name, birth_label, death_label, epigraph, intro, honorific, portrait_path, timeline, wishes, footer_note, is_published';
+  var FIELD_MAP = { fName:'deceased_name', fSaint:'saint_name', fHonorific:'honorific', fBirth:'birth_label', fDeath:'death_label', fEpigraph:'epigraph', fIntro:'intro', fFooter:'footer_note' };
+
+  function markDirty(){ state.dirty = true; var s = $('saveStatus'); s.textContent = 'Có thay đổi chưa lưu.'; s.className = 'status dirty'; }
+  function markSaved(text){ state.dirty = false; var s = $('saveStatus'); s.textContent = text; s.className = 'status'; }
+  Object.keys(FIELD_MAP).forEach(function(id){ $(id).addEventListener('input', markDirty); });
+  window.addEventListener('beforeunload', function(e){ if (state.dirty) { e.preventDefault(); e.returnValue = ''; } });
+  $('backLink').addEventListener('click', function(e){
+    e.preventDefault();
+    if (state.dirty && !confirm('Có thay đổi chưa lưu. Vẫn quay lại danh sách?')) return;
+    state.dirty = false; openList();
+  });
+
+  function openEditor(id){
+    go('viewEdit');
+    setMsg($('editMsg'), 'Đang tải…');
+    sb.from('graves').select(GRAVE_EDIT_COLS).eq('id', id).maybeSingle().then(function(res){
+      if (res.error) throw res.error;
+      if (!res.data) { setMsg($('editMsg'), 'Không mở được trang này (không tồn tại hoặc không có quyền).', 'err'); return; }
+      state.cur = res.data;
+      fillForm();
+      markSaved('Đã tải bản lưu gần nhất.');
+      setMsg($('editMsg'), '');
+      return loadMedia();
+    }).catch(function(err){ setMsg($('editMsg'), friendly(err), 'err'); });
+  }
+
+  function fillForm(){
+    var g = state.cur;
+    Object.keys(FIELD_MAP).forEach(function(id){ $(id).value = g[FIELD_MAP[id]] || ''; });
+    $('edTitle').textContent = g.deceased_name;
+    var b = $('edBadge'); b.className = 'badge ' + (g.is_published ? 'pub' : 'draft'); b.textContent = g.is_published ? 'Đã xuất bản' : 'Nháp';
+    $('edLink').textContent = pageUrl(g.memorial_slug, false);
+    $('publishBtn').textContent = g.is_published ? 'Ngừng xuất bản' : 'Xuất bản';
+    $('publishBtn').className = g.is_published ? 'btn danger' : 'btn brass';
+    renderPortrait();
+    renderRepeater('tl', Array.isArray(g.timeline) ? g.timeline : []);
+    renderRepeater('ws', Array.isArray(g.wishes) ? g.wishes : []);
+  }
+
+  // --- Danh sách lặp: dòng thời gian (tl) & di nguyện (ws) ---
+  var REP = {
+    tl: { list:'tlList', max:50, a:'year', b:'text', aPh:'Năm (VD: 1987)', bPh:'Nội dung mốc', aMax:20, bMax:500 },
+    ws: { list:'wsList', max:20, a:'title', b:'text', aPh:'Tiêu đề (VD: Gìn giữ sự hòa thuận)', bPh:'Nội dung di nguyện', aMax:150, bMax:1000 }
+  };
+  function renderRepeater(kind, items){
+    var cfg = REP[kind], box = $(cfg.list); box.textContent = '';
+    items.forEach(function(it){ box.appendChild(repRow(kind, it[cfg.a] || '', it[cfg.b] || '')); });
+  }
+  function repRow(kind, aVal, bVal){
+    var cfg = REP[kind];
+    var row = document.createElement('div'); row.className = 'rep';
+    var top = document.createElement('div'); top.className = 'rep-top';
+    var a = document.createElement('input'); a.type = 'text'; a.placeholder = cfg.aPh; a.maxLength = cfg.aMax; a.value = aVal; a.className = 'rep-a';
+    if (kind === 'tl') a.style.maxWidth = '160px';
+    var tools = document.createElement('div'); tools.className = 'rep-tools';
+    [['↑','Lên'],['↓','Xuống'],['✕','Xóa mục này']].forEach(function(t, i){
+      var bt = document.createElement('button'); bt.type = 'button'; bt.textContent = t[0]; bt.title = t[1]; bt.setAttribute('aria-label', t[1]);
+      bt.addEventListener('click', function(){
+        if (i === 0 && row.previousElementSibling) row.parentNode.insertBefore(row, row.previousElementSibling);
+        if (i === 1 && row.nextElementSibling) row.parentNode.insertBefore(row.nextElementSibling, row);
+        if (i === 2) row.remove();
+        markDirty();
+      });
+      tools.appendChild(bt);
+    });
+    top.appendChild(a); top.appendChild(tools);
+    var b = document.createElement('textarea'); b.placeholder = cfg.bPh; b.maxLength = cfg.bMax; b.value = bVal; b.className = 'rep-b';
+    a.addEventListener('input', markDirty); b.addEventListener('input', markDirty);
+    row.appendChild(top); row.appendChild(b);
+    return row;
+  }
+  function addRep(kind){
+    var cfg = REP[kind], box = $(cfg.list);
+    if (box.children.length >= cfg.max) { alert('Tối đa ' + cfg.max + ' mục.'); return; }
+    var r = repRow(kind, '', ''); box.appendChild(r); r.querySelector('.rep-a').focus(); markDirty();
+  }
+  $('tlAdd').addEventListener('click', function(){ addRep('tl'); });
+  $('wsAdd').addEventListener('click', function(){ addRep('ws'); });
+  function collectRep(kind){
+    var cfg = REP[kind], out = [];
+    Array.prototype.forEach.call($(cfg.list).children, function(row){
+      var a = row.querySelector('.rep-a').value.trim(), b = row.querySelector('.rep-b').value.trim();
+      if (kind === 'tl') { if (b) out.push(a ? { year: a, text: b } : { text: b }); }
+      else if (a || b) { var o = {}; if (a) o.title = a; if (b) o.text = b; out.push(o); }
+    });
+    return out;
+  }
+
+  // --- Lưu ---
+  function buildPayload(){
+    var p = {};
+    Object.keys(FIELD_MAP).forEach(function(id){ p[FIELD_MAP[id]] = trimOrNull($(id).value); });
+    p.timeline = collectRep('tl');
+    p.wishes = collectRep('ws');
+    return p;
+  }
+  function save(){
+    var p = buildPayload();
+    if (!p.deceased_name) { setMsg($('editMsg'), 'Họ và tên không được để trống.', 'err'); return Promise.reject(new Error('validation')); }
+    var btn = $('saveBtn'); btn.disabled = true; setMsg($('editMsg'), 'Đang lưu…');
+    return sb.from('graves').update(p).eq('id', state.cur.id).select(GRAVE_EDIT_COLS).maybeSingle().then(function(res){
+      if (res.error) throw res.error;
+      if (!res.data) throw { code: '42501', message: 'Không lưu được: không có quyền hoặc trang không còn tồn tại.' };
+      state.cur = res.data; fillForm();
+      var t = new Date();
+      markSaved('Đã lưu lúc ' + t.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '.');
+      setMsg($('editMsg'), 'Đã lưu vào cơ sở dữ liệu.', 'ok');
+      return res.data;
+    }).catch(function(err){
+      if (err && err.message !== 'validation') setMsg($('editMsg'), friendly(err), 'err');
+      throw err;
+    }).finally(function(){ btn.disabled = false; });
+  }
+  $('saveBtn').addEventListener('click', function(){ save().catch(function(){}); });
+
+  $('previewBtn').addEventListener('click', function(){
+    // Mở tab trước (tránh bị chặn popup), lưu xong mới điều hướng tới bản xem trước.
+    var w = window.open('about:blank', '_blank');
+    var go2 = function(){ var u = pageUrl(state.cur.memorial_slug, true); if (w) w.location.href = u; else window.location.href = u; };
+    if (!state.dirty) { go2(); return; }
+    save().then(go2).catch(function(){ if (w) w.close(); });
+  });
+
+  $('publishBtn').addEventListener('click', function(){
+    var willPublish = !state.cur.is_published;
+    var q = willPublish ? 'Xuất bản trang này? Sau khi xuất bản, bất kỳ ai có đường dẫn đều xem được.'
+                        : 'Ngừng xuất bản? Khách sẽ không xem được trang này nữa (dữ liệu vẫn được giữ).';
+    if (!confirm(q)) return;
+    var chain = state.dirty ? save() : Promise.resolve();
+    chain.then(function(){
+      setMsg($('editMsg'), willPublish ? 'Đang xuất bản…' : 'Đang ngừng xuất bản…');
+      return sb.from('graves').update({ is_published: willPublish }).eq('id', state.cur.id).select(GRAVE_EDIT_COLS).maybeSingle();
+    }).then(function(res){
+      if (res.error) throw res.error;
+      if (!res.data) throw { code: '42501', message: 'Không có quyền.' };
+      state.cur = res.data; fillForm(); markSaved('Đã lưu.');
+      setMsg($('editMsg'), willPublish ? 'Đã xuất bản. Khách có thể mở đường dẫn công khai.' : 'Đã ngừng xuất bản. Trang trở về Nháp.', 'ok');
+    }).catch(function(err){ if (err && err.message !== 'validation') setMsg($('editMsg'), friendly(err), 'err'); });
+  });
+
+  $('copyLinkBtn').addEventListener('click', function(){
+    var t = $('edLink').textContent;
+    (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function(){
+      setMsg($('editMsg'), 'Đã sao chép đường dẫn.', 'ok');
+    }).catch(function(){ prompt('Sao chép đường dẫn:', t); });
+  });
+
+  // ===== TẢI TỆP LÊN STORAGE =====
+  function checkFile(file, kind){
+    if (!file) return 'Vui lòng chọn tệp.';
+    if (!MIME_EXT[file.type] || file.type.indexOf(kind === 'video' ? 'video/' : 'image/') !== 0)
+      return kind === 'video' ? '"' + file.name + '": chỉ nhận MP4, WebM hoặc MOV.' : '"' + file.name + '": chỉ nhận JPG, PNG hoặc WebP.';
+    if (file.size === 0) return '"' + file.name + '": tệp rỗng.';
+    if (file.size > LIMIT[kind]) return '"' + file.name + '": vượt quá ' + (LIMIT[kind] / 1048576) + 'MB.';
+    return null;
+  }
+  function uploadObject(file, kind){
+    var path = state.cur.id + '/' + (kind === 'video' ? 'videos' : 'images') + '/' + uuid() + '.' + MIME_EXT[file.type];
+    return sb.storage.from(CFG.bucket).upload(path, file, { contentType: file.type, upsert: false, cacheControl: '31536000' })
+      .then(function(res){ if (res.error) throw res.error; return path; });
+  }
+  function removeObject(path){
+    return sb.storage.from(CFG.bucket).remove([path]).then(function(r){ if (r.error) console.warn('[quanly] không dọn được tệp', path, r.error); })
+      .catch(function(e){ console.warn('[quanly] không dọn được tệp', path, e); });
+  }
+
+  // --- Ảnh chân dung ---
+  function renderPortrait(){
+    var box = $('portraitBox'), g = state.cur;
+    box.textContent = '';
+    if (g.portrait_path) {
+      var img = document.createElement('img'); img.alt = 'Ảnh chân dung'; img.src = publicUrl(g.portrait_path);
+      img.addEventListener('error', function(){ box.textContent = ''; var s = document.createElement('span'); s.textContent = '!'; box.appendChild(s); setMsg($('portraitMsg'), 'Không hiển thị được ảnh chân dung đã lưu. Hãy tải lại ảnh.', 'err'); });
+      box.appendChild(img);
+    } else {
+      var s = document.createElement('span'); s.textContent = initialOf(g.deceased_name); box.appendChild(s);
+    }
+  }
+  $('portraitBtn').addEventListener('click', function(){
+    var f = $('portraitFile').files[0], err = checkFile(f, 'image');
+    if (err) { setMsg($('portraitMsg'), err, 'err'); return; }
+    var btn = this; btn.disabled = true; setMsg($('portraitMsg'), 'Đang tải ảnh lên…');
+    var old = state.cur.portrait_path, newPath;
+    uploadObject(f, 'image').then(function(path){
+      newPath = path;
+      return sb.from('graves').update({ portrait_path: path }).eq('id', state.cur.id).select('portrait_path').maybeSingle();
+    }).then(function(res){
+      if (res.error) throw res.error;
+      if (!res.data) throw { code: '42501', message: 'Không có quyền.' };
+      state.cur.portrait_path = res.data.portrait_path;
+      renderPortrait(); $('portraitFile').value = '';
+      setMsg($('portraitMsg'), 'Đã lưu ảnh chân dung.', 'ok');
+      if (old && old !== newPath) removeObject(old);
+    }).catch(function(err){
+      if (newPath) removeObject(newPath);   // không để lại tệp mồ côi
+      setMsg($('portraitMsg'), friendly(err), 'err');
+    }).then(function(){ btn.disabled = false; });
+  });
+
+  // --- Album ảnh & video (bảng memorial_media) ---
+  function loadMedia(){
+    return sb.from('memorial_media').select('id, type, storage_path, caption, sort_order, created_at')
+      .eq('grave_id', state.cur.id).order('sort_order').order('created_at').then(function(res){
+        if (res.error) throw res.error;
+        state.media = res.data || [];
+        renderMedia();
+      }).catch(function(err){ setMsg($('imgMsg'), 'Không tải được danh sách ảnh/video: ' + friendly(err), 'err'); });
+  }
+  function mediaOf(type){ return state.media.filter(function(m){ return m.type === type; }); }
+  function renderMedia(){ renderMediaGrid('image', $('imgGrid')); renderMediaGrid('video', $('vidGrid')); }
+  function renderMediaGrid(type, grid){
+    grid.textContent = '';
+    var items = mediaOf(type);
+    if (!items.length) { var p = document.createElement('div'); p.className = 'muted'; p.textContent = type === 'image' ? 'Chưa có ảnh.' : 'Chưa có video.'; grid.appendChild(p); return; }
+    items.forEach(function(m, idx){
+      var card = document.createElement('div'); card.className = 'm-item';
+      var th = document.createElement('div'); th.className = 'thumb';
+      var url = publicUrl(m.storage_path);
+      if (type === 'image') {
+        var img = document.createElement('img'); img.loading = 'lazy'; img.alt = m.caption || 'Ảnh'; img.src = url;
+        img.addEventListener('click', function(){ $('lightboxImg').src = url; show($('lightbox'), true); });
+        img.addEventListener('error', function(){ th.textContent = ''; var d = document.createElement('div'); d.className = 'broken'; d.textContent = 'Không hiển thị được ảnh này'; th.appendChild(d); });
+        th.appendChild(img);
+      } else {
+        var v = document.createElement('video'); v.controls = true; v.preload = 'metadata'; v.playsInline = true; v.src = url;
+        th.appendChild(v);
+      }
+      var body = document.createElement('div'); body.className = 'body';
+      var cap = document.createElement('input'); cap.type = 'text'; cap.maxLength = 300; cap.placeholder = 'Chú thích (không bắt buộc)'; cap.value = m.caption || '';
+      var tools = document.createElement('div'); tools.className = 'tools';
+      var bSave = document.createElement('button'); bSave.type = 'button'; bSave.textContent = 'Lưu chú thích';
+      var bUp = document.createElement('button'); bUp.type = 'button'; bUp.textContent = '←'; bUp.title = 'Đưa lên trước'; bUp.disabled = idx === 0;
+      var bDown = document.createElement('button'); bDown.type = 'button'; bDown.textContent = '→'; bDown.title = 'Đưa ra sau'; bDown.disabled = idx === items.length - 1;
+      var bDel = document.createElement('button'); bDel.type = 'button'; bDel.textContent = 'Xóa'; bDel.className = 'del';
+      bSave.addEventListener('click', function(){ updateCaption(m, cap.value, type); });
+      bUp.addEventListener('click', function(){ moveMedia(type, idx, -1); });
+      bDown.addEventListener('click', function(){ moveMedia(type, idx, 1); });
+      bDel.addEventListener('click', function(){ deleteMedia(m, type); });
+      tools.appendChild(bSave); tools.appendChild(bUp); tools.appendChild(bDown); tools.appendChild(bDel);
+      body.appendChild(cap); body.appendChild(tools);
+      card.appendChild(th); card.appendChild(body);
+      grid.appendChild(card);
+    });
+  }
+  function msgEl(type){ return type === 'image' ? $('imgMsg') : $('vidMsg'); }
+  function updateCaption(m, value, type){
+    var v = trimOrNull(value);
+    sb.from('memorial_media').update({ caption: v }).eq('id', m.id).select('id, caption').maybeSingle().then(function(res){
+      if (res.error) throw res.error;
+      if (!res.data) throw { code: '42501', message: 'Không có quyền.' };
+      m.caption = res.data.caption; setMsg(msgEl(type), 'Đã lưu chú thích.', 'ok');
+    }).catch(function(err){ setMsg(msgEl(type), friendly(err), 'err'); });
+  }
+  function moveMedia(type, idx, dir){
+    var items = mediaOf(type), j = idx + dir;
+    if (j < 0 || j >= items.length) return;
+    var a = items[idx], b = items[j];
+    var tmp = items[idx]; items[idx] = items[j]; items[j] = tmp;
+    // Đánh số lại toàn bộ theo thứ tự mới để không bị trùng sort_order
+    var updates = items.map(function(m, i){ return { m: m, order: i + 1 }; }).filter(function(u){ return u.m.sort_order !== u.order; });
+    setMsg(msgEl(type), 'Đang lưu thứ tự…');
+    updates.reduce(function(p, u){
+      return p.then(function(){
+        return sb.from('memorial_media').update({ sort_order: u.order }).eq('id', u.m.id).select('id').maybeSingle().then(function(res){
+          if (res.error) throw res.error; if (!res.data) throw { code: '42501', message: 'Không có quyền.' };
+        });
+      });
+    }, Promise.resolve()).then(function(){ setMsg(msgEl(type), 'Đã lưu thứ tự.', 'ok'); })
+      .catch(function(err){ setMsg(msgEl(type), friendly(err), 'err'); })
+      .then(loadMedia);
+  }
+  function deleteMedia(m, type){
+    if (!confirm('Xóa vĩnh viễn ' + (type === 'image' ? 'ảnh' : 'video') + ' này?')) return;
+    sb.from('memorial_media').delete().eq('id', m.id).select('id').maybeSingle().then(function(res){
+      if (res.error) throw res.error;
+      if (!res.data) throw { code: '42501', message: 'Không có quyền.' };
+      return removeObject(m.storage_path);
+    }).then(function(){ setMsg(msgEl(type), 'Đã xóa.', 'ok'); })
+      .catch(function(err){ setMsg(msgEl(type), friendly(err), 'err'); })
+      .then(loadMedia);
+  }
+  function uploadMedia(type, files, busyEl, btn){
+    var list = Array.prototype.slice.call(files || []);
+    if (!list.length) { setMsg(msgEl(type), 'Vui lòng chọn tệp.', 'err'); return; }
+    var errs = list.map(function(f){ return checkFile(f, type); }).filter(Boolean);
+    if (errs.length) { setMsg(msgEl(type), errs.join(' '), 'err'); return; }
+    btn.disabled = true; setMsg(msgEl(type), '');
+    var done = 0, failed = [];
+    var maxOrder = state.media.reduce(function(mx, m){ return Math.max(mx, m.sort_order || 0); }, 0);
+    list.reduce(function(p, f){
+      return p.then(function(){
+        busyEl.textContent = 'Đang tải ' + (done + failed.length + 1) + '/' + list.length + '…';
+        var path;
+        return uploadObject(f, type).then(function(pth){
+          path = pth; maxOrder += 1;
+          return sb.from('memorial_media').insert({ grave_id: state.cur.id, type: type, storage_path: path, sort_order: maxOrder })
+            .select('id').single();
+        }).then(function(res){ if (res.error) throw res.error; done++; })
+          .catch(function(err){ if (path) removeObject(path); failed.push(f.name + ': ' + friendly(err)); });
+      });
+    }, Promise.resolve()).then(function(){
+      busyEl.textContent = '';
+      btn.disabled = false;
+      (type === 'image' ? $('imgFiles') : $('vidFile')).value = '';
+      if (failed.length) setMsg(msgEl(type), 'Tải thành công ' + done + '/' + list.length + '. Lỗi: ' + failed.join(' | '), 'err');
+      else setMsg(msgEl(type), 'Đã tải lên và lưu ' + done + ' tệp.', 'ok');
+      return loadMedia();
+    });
+  }
+  $('imgUploadBtn').addEventListener('click', function(){ uploadMedia('image', $('imgFiles').files, $('imgBusy'), this); });
+  $('vidUploadBtn').addEventListener('click', function(){ uploadMedia('video', $('vidFile').files, $('vidBusy'), this); });
+
+  $('lightboxClose').addEventListener('click', function(){ show($('lightbox'), false); $('lightboxImg').src = ''; });
+  $('lightbox').addEventListener('click', function(e){ if (e.target === this) { show(this, false); $('lightboxImg').src = ''; } });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && !$('lightbox').hidden) { show($('lightbox'), false); } });
+
+  // ===== KHỞI ĐỘNG =====
+  sb.auth.getSession().then(function(res){
+    var s = res.data && res.data.session;
+    state.user = s ? s.user : null; setUserBar();
+    if (state.user) openList(); else go('viewLogin');
+  }).catch(function(){ go('viewLogin'); });
+  sb.auth.onAuthStateChange(function(event, session){
+    if (event === 'SIGNED_OUT') { state.user = null; setUserBar(); go('viewLogin'); }
+  });
+</script>
+</body>
+</html>

@@ -100,6 +100,27 @@
   /* Gallery */
   .gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
   .g-item{aspect-ratio:1;background:var(--paper-deep);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-style:italic;color:var(--sage);font-size:12px;}
+  button.g-item{padding:0;cursor:zoom-in;overflow:hidden;}
+  .g-item img{width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.4s ease;}
+  button.g-item:hover img{transform:scale(1.03);}
+  .frame img{width:100%;height:100%;object-fit:cover;border-radius:50%;position:relative;}
+
+  /* Lightbox */
+  .lb{position:fixed;inset:0;background:rgba(20,24,30,0.94);z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3.5rem 0.75rem 1rem;}
+  .lb img{max-width:100%;max-height:calc(100vh - 8rem);object-fit:contain;}
+  .lb-cap{color:rgba(244,238,226,0.85);font-family:'Cormorant Garamond',serif;font-style:italic;font-size:16px;margin-top:0.75rem;text-align:center;max-width:640px;}
+  .lb-count{color:rgba(244,238,226,0.55);font-size:12px;margin-top:0.25rem;}
+  .lb button{position:absolute;background:rgba(244,238,226,0.12);color:var(--paper);border:1px solid rgba(244,238,226,0.25);border-radius:2px;font-family:'Be Vietnam Pro',sans-serif;cursor:pointer;}
+  .lb-close{top:12px;right:12px;padding:0.4rem 0.9rem;font-size:13px;}
+  .lb-prev,.lb-next{top:50%;transform:translateY(-50%);width:44px;height:56px;font-size:22px;}
+  .lb-prev{left:8px;} .lb-next{right:8px;}
+
+  /* Video thật */
+  .video-card + .video-card{margin-top:1rem;}
+  .video-card video{display:block;width:100%;aspect-ratio:16/9;background:#000;}
+
+  /* Xem trước bản nháp */
+  .preview-bar{position:sticky;top:0;z-index:40;background:var(--brass);color:var(--ink);text-align:center;font-size:13px;font-weight:500;padding:0.55rem 1rem;}
 
   /* Video */
   .video-card{border:1px solid var(--line);border-radius:4px;overflow:hidden;}
@@ -161,6 +182,8 @@
 </head>
 <body>
 
+<div class="preview-bar" id="previewBar" hidden>BẢN XEM TRƯỚC — chỉ người quản lý thấy được. Khách chỉ xem được sau khi trang được xuất bản.</div>
+
 <div class="hero">
   <div class="frame" id="heroFrame" hidden><span id="heroInitial"></span></div>
   <h1 id="heroName" hidden></h1>
@@ -199,23 +222,26 @@
   </div>
 </section>
 
-<section class="reveal" hidden>
+<section class="reveal" id="secGallery" hidden>
   <div class="eyebrow">Khoảnh khắc</div>
   <h2>Hình ảnh</h2>
-  <div class="gallery">
-    <div class="g-item">ảnh 1</div><div class="g-item">ảnh 2</div><div class="g-item">ảnh 3</div>
-    <div class="g-item">ảnh 4</div><div class="g-item">ảnh 5</div><div class="g-item">ảnh 6</div>
-  </div>
+  <div class="gallery" id="galleryGrid"></div>
 </section>
 
-<section class="reveal" hidden>
+<section class="reveal" id="secVideo" hidden>
   <div class="eyebrow">Video kỷ niệm</div>
   <h2>Thước phim</h2>
-  <div class="video-card">
-    <div class="video-frame"><i>▶</i></div>
-    <div class="video-cap">Video clip tưởng nhớ do gia đình chia sẻ</div>
-  </div>
+  <div id="videoList"></div>
 </section>
+
+<div class="lb" id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Xem ảnh">
+  <button type="button" class="lb-close" id="lbClose">Đóng ✕</button>
+  <button type="button" class="lb-prev" id="lbPrev" aria-label="Ảnh trước">‹</button>
+  <img id="lbImg" alt="">
+  <div class="lb-cap" id="lbCap"></div>
+  <div class="lb-count" id="lbCount"></div>
+  <button type="button" class="lb-next" id="lbNext" aria-label="Ảnh sau">›</button>
+</div>
 
 <section class="reveal" hidden>
   <div class="eyebrow">Ghi âm kỷ niệm</div>
@@ -565,12 +591,18 @@
   var SUPABASE_URL = 'https://mhyadympadwxzuwwlnps.supabase.co';            // STAGING
   var SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_JmjzqnFPKcC2bQ2T4Kr9vQ_QoFzdXN1'; // STAGING — key công khai, bảo vệ bằng RLS
 
+  var MEDIA_BUCKET = 'memorial-media';
+  // Khóa phiên dùng chung với admin.html — CHỈ dùng ở chế độ xem trước (?preview=1).
+  var ADMIN_STORAGE_KEY = 'phy-tuongniem-quanly';
+  var IS_PREVIEW = new URLSearchParams(window.location.search).get('preview') === '1';
+
   // Danh sách cột cố định — KHÔNG dùng select('*') (anon chỉ được cấp quyền theo cột).
   var GRAVE_COLUMNS = [
-    'deceased_name', 'saint_name', 'birth_label', 'death_label', 'epigraph',
-    'intro', 'honorific', 'timeline', 'wishes', 'footer_note',
+    'id', 'deceased_name', 'saint_name', 'birth_label', 'death_label', 'epigraph',
+    'intro', 'honorific', 'portrait_path', 'timeline', 'wishes', 'footer_note',
     'is_published', 'incense_count'
   ].join(',');
+  var PATH_RE = /^[0-9a-f-]{36}\/(images\/[0-9a-f-]{36}\.(jpg|jpeg|png|webp)|videos\/[0-9a-f-]{36}\.(mp4|webm|mov))$/;
 
   var SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/; // cùng ràng buộc graves_slug_format
 
@@ -593,8 +625,12 @@
     if (!window.supabase || typeof window.supabase.createClient !== 'function') {
       throw new Error('Không nạp được thư viện Supabase');
     }
+    // Khách viếng: không lưu phiên. Xem trước: đọc phiên đăng nhập của trang quản lý
+    // (cùng tên miền) để RLS cho phép người quản lý đọc bản nháp của trang mình.
     sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false }
+      auth: IS_PREVIEW
+        ? { storageKey: ADMIN_STORAGE_KEY, persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
+        : { persistSession: false, autoRefreshToken: false }
     });
     return sbClient;
   }
@@ -615,7 +651,8 @@
 
   // Trả về object đã làm sạch, hoặc null nếu không hợp lệ để hiển thị.
   function validateMemorial(row){
-    if (!row || row.is_published !== true || !isText(row.deceased_name)) return null;
+    if (!row || !isText(row.deceased_name)) return null;
+    if (row.is_published !== true && !IS_PREVIEW) return null;
     var timeline = Array.isArray(row.timeline) ? row.timeline.filter(function(t){
       return t && typeof t === 'object' && isText(t.text) && (t.year == null || typeof t.year === 'string');
     }) : [];
@@ -625,6 +662,9 @@
     }) : [];
     var incense = Number.isInteger(row.incense_count) && row.incense_count >= 0 ? row.incense_count : 0;
     return {
+      id: row.id,
+      published: row.is_published === true,
+      portrait: typeof row.portrait_path === 'string' && PATH_RE.test(row.portrait_path) ? row.portrait_path : '',
       name: row.deceased_name.trim(),
       saint: isText(row.saint_name) ? row.saint_name.trim() : '',
       birth: isText(row.birth_label) ? row.birth_label.trim() : '',
@@ -649,6 +689,16 @@
   function renderHero(m){
     document.title = m.name + ' — Tưởng niệm';
     $('heroInitial').textContent = initialOf(m.name);
+    var oldImg = $('heroFrame').querySelector('img'); if (oldImg) oldImg.remove();
+    show($('heroInitial'), true);
+    if (m.portrait) {
+      var img = document.createElement('img');
+      img.alt = m.name;
+      img.addEventListener('load', function(){ show($('heroInitial'), false); });
+      img.addEventListener('error', function(){ img.remove(); show($('heroInitial'), true); }); // lỗi ảnh → giữ chữ cái đầu
+      img.src = mediaUrl(m.portrait);
+      $('heroFrame').appendChild(img);
+    }
     $('heroName').textContent = m.name;
     $('heroSaint').textContent = m.saint ? 'Tên thánh: ' + m.saint : '';
     var dates = m.birth || m.death ? (m.birth + '  –  ' + m.death).trim() : '';
@@ -716,6 +766,7 @@
   }
 
   function submitIncense(){
+    if (IS_PREVIEW) { setIncenseStatus('Bản xem trước: không ghi nhận nén hương.'); return; }
     if (incensePending || !currentSlug) return;
     var client;
     try { client = getClient(); } catch (e) { setIncenseStatus('Chưa ghi nhận được nén hương. Vui lòng thử lại.'); return; }
@@ -745,6 +796,98 @@
     });
   }
 
+  // ===== ẢNH & VIDEO (bảng memorial_media + bucket memorial-media) =====
+  // Khách: RLS chỉ trả media của trang ĐÃ XUẤT BẢN. Xem trước: người quản lý thấy media trang mình.
+  // Lỗi tải media KHÔNG làm hỏng phần còn lại của trang — chỉ ẩn khu ảnh/video.
+  function mediaUrl(path){
+    return getClient().storage.from(MEDIA_BUCKET).getPublicUrl(path).data.publicUrl;
+  }
+  function loadMedia(graveId){
+    return getClient().from('memorial_media')
+      .select('id, type, storage_path, caption, sort_order')
+      .eq('grave_id', graveId).order('sort_order').order('created_at')
+      .then(function(res){
+        if (res.error) throw res.error;
+        return (res.data || []).filter(function(x){ return x && PATH_RE.test(x.storage_path) && (x.type === 'image' || x.type === 'video'); });
+      });
+  }
+
+  var galleryItems = [];
+  var lbIndex = 0;
+
+  function renderGallery(items){
+    var grid = $('galleryGrid');
+    grid.textContent = '';
+    galleryItems = items.filter(function(x){ return x.type === 'image'; });
+    galleryItems.forEach(function(item, i){
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'g-item';
+      b.setAttribute('aria-label', 'Xem ảnh ' + (i + 1) + (item.caption ? ': ' + item.caption : ''));
+      var img = document.createElement('img');
+      img.loading = 'lazy'; img.alt = item.caption || ('Ảnh ' + (i + 1)); img.src = mediaUrl(item.storage_path);
+      img.addEventListener('error', function(){ img.remove(); b.textContent = 'Không tải được ảnh'; b.disabled = true; });
+      b.appendChild(img);
+      b.addEventListener('click', function(){ openLightbox(i); });
+      grid.appendChild(b);
+    });
+    show($('secGallery'), galleryItems.length > 0);
+  }
+
+  function renderVideos(items){
+    var box = $('videoList');
+    box.textContent = '';
+    var vids = items.filter(function(x){ return x.type === 'video'; });
+    vids.forEach(function(item){
+      var card = document.createElement('div'); card.className = 'video-card';
+      var v = document.createElement('video');
+      v.controls = true; v.preload = 'metadata'; v.playsInline = true; v.src = mediaUrl(item.storage_path);
+      v.addEventListener('error', function(){
+        var f = document.createElement('div'); f.className = 'video-frame';
+        var t = document.createElement('div'); t.className = 'video-cap'; t.textContent = 'Không phát được video này.';
+        f.appendChild(t); v.replaceWith(f);
+      });
+      card.appendChild(v);
+      if (isText(item.caption)) {
+        var c = document.createElement('div'); c.className = 'video-cap'; c.textContent = item.caption; card.appendChild(c);
+      }
+      box.appendChild(card);
+    });
+    show($('secVideo'), vids.length > 0);
+  }
+
+  function openLightbox(i){
+    if (!galleryItems.length) return;
+    lbIndex = (i + galleryItems.length) % galleryItems.length;
+    var item = galleryItems[lbIndex];
+    $('lbImg').src = mediaUrl(item.storage_path);
+    $('lbImg').alt = item.caption || ('Ảnh ' + (lbIndex + 1));
+    $('lbCap').textContent = item.caption || '';
+    $('lbCount').textContent = (lbIndex + 1) + ' / ' + galleryItems.length;
+    show($('lbPrev'), galleryItems.length > 1); show($('lbNext'), galleryItems.length > 1);
+    show($('lightbox'), true);
+    document.body.style.overflow = 'hidden';
+    $('lbClose').focus();
+  }
+  function closeLightbox(){ show($('lightbox'), false); $('lbImg').removeAttribute('src'); document.body.style.overflow = ''; }
+  $('lbClose').addEventListener('click', closeLightbox);
+  $('lbPrev').addEventListener('click', function(){ openLightbox(lbIndex - 1); });
+  $('lbNext').addEventListener('click', function(){ openLightbox(lbIndex + 1); });
+  $('lightbox').addEventListener('click', function(e){ if (e.target === this) closeLightbox(); });
+  document.addEventListener('keydown', function(e){
+    if ($('lightbox').hidden) return;
+    if (e.key === 'Escape') closeLightbox();
+    if (e.key === 'ArrowLeft') openLightbox(lbIndex - 1);
+    if (e.key === 'ArrowRight') openLightbox(lbIndex + 1);
+  });
+  (function(){ // vuốt trái/phải trên điện thoại
+    var x0 = null;
+    $('lightbox').addEventListener('touchstart', function(e){ x0 = e.touches[0].clientX; }, { passive: true });
+    $('lightbox').addEventListener('touchend', function(e){
+      if (x0 === null) return; var dx = e.changedTouches[0].clientX - x0; x0 = null;
+      if (Math.abs(dx) > 50) openLightbox(lbIndex + (dx < 0 ? 1 : -1));
+    });
+  })();
+
   var STATE_TEXT = {
     loading: 'Đang tải trang tưởng niệm…',
     notfound: 'Không tìm thấy trang tưởng niệm.',
@@ -754,7 +897,8 @@
   function showState(state){
     var ready = state === 'ready';
     show($('stateMsg'), !ready);
-    if (!ready) $('stateMsg').textContent = STATE_TEXT[state];
+    if (!ready) $('stateMsg').textContent = STATE_TEXT[state] +
+      (state === 'notfound' && IS_PREVIEW ? ' (Xem trước bản nháp cần đăng nhập ở trang quản lý bằng tài khoản có quyền với trang này.)' : '');
     show($('retryBtn'), state === 'error');
     if (state === 'notfound') document.title = 'Không tìm thấy — Tưởng niệm';
   }
@@ -774,7 +918,17 @@
       renderIncenseCount(m);
       renderFooter(m);
       currentSlug = slug;
+      show($('previewBar'), IS_PREVIEW);
+      if (IS_PREVIEW) $('previewBar').textContent = m.published
+        ? 'BẢN XEM TRƯỚC — trang này ĐÃ xuất bản; khách đang thấy nội dung đã lưu.'
+        : 'BẢN XEM TRƯỚC — trang đang là NHÁP, chỉ người quản lý thấy. Khách chưa xem được.';
       showState('ready');
+      loadMedia(m.id).then(function(items){
+        renderGallery(items);
+        renderVideos(items);
+      }).catch(function(err){
+        console.error('[memorial] tải ảnh/video thất bại:', err); // giữ nguyên phần nội dung đã hiển thị
+      });
     }).catch(function(err){
       console.error('[memorial] tải thất bại:', err);
       showState('error');
