@@ -138,6 +138,9 @@
   .msg-form input:focus{outline:none;border-color:var(--brass);}
   .msg-form button{border:1px solid var(--ink);background:none;border-radius:2px;padding:0 1.1rem;font-family:'Be Vietnam Pro',sans-serif;font-size:14px;color:var(--ink);cursor:pointer;}
   .msg-form button:disabled{opacity:0.55;cursor:default;}
+  .msg-count{margin-top:0.4rem;font-size:12px;color:var(--sage);text-align:right;font-variant-numeric:tabular-nums;}
+  .msg-count.near{color:var(--brass);}
+  .msg-count.full{color:#B0553F;}
   .msg-status{margin-top:0.75rem;font-size:13px;color:var(--sage);}
   .msg-status.err{color:#B0553F;}
 
@@ -277,9 +280,10 @@
     <div class="msg"><div class="msg-name">Người thân</div><div class="msg-text">Chưa có lời nhắn nào — hãy là người đầu tiên chia sẻ kỷ niệm về ông.</div></div>
   </div>
   <div class="msg-form">
-    <input type="text" id="msgInput" placeholder="Viết vài dòng tưởng nhớ..." maxlength="1000">
+    <input type="text" id="msgInput" placeholder="Viết vài dòng tưởng nhớ..." aria-describedby="msgCount">
     <button id="sendMsg">Gửi</button>
   </div>
+  <div class="msg-count" id="msgCount">0/1000 ký tự</div>
   <div class="msg-status" id="msgStatus" role="status" aria-live="polite" hidden></div>
 </section>
 
@@ -327,7 +331,7 @@
     if (typeof submitGuestbook === 'function') submitGuestbook();
   });
   msgInput.addEventListener('keydown', function(e){
-    if (e.key === 'Enter' && typeof submitGuestbook === 'function') { e.preventDefault(); submitGuestbook(); }
+    if (e.key === 'Enter' && !e.isComposing && typeof submitGuestbook === 'function') { e.preventDefault(); submitGuestbook(); }
   });
 
   // ===== GHI ÂM KỶ NIỆM =====
@@ -901,6 +905,85 @@
   var gbPending = false;
   var gbLastSent = '';
 
+  // ----- Đếm & giới hạn 1000 ký tự -----
+  // Đếm theo "điểm mã Unicode" của văn bản đã chuẩn hóa NFC — GIỐNG cách máy chủ đếm (char_length trong
+  // Postgres UTF8). Vì vậy "ệ" = 1 ký tự dù bàn phím gõ dạng tổ hợp; emoji 😀 = 1; emoji ghép (👨‍👩‍👧) = 5.
+  // Không dùng thuộc tính maxlength của HTML vì nó đếm theo UTF-16 (emoji = 2) → lệch với máy chủ.
+  // Máy chủ (post_guestbook_entry + ràng buộc CHECK của bảng) vẫn tự kiểm tra lại; đây chỉ là lớp giao diện.
+  var GB_NEAR = 900;               // từ mức này bộ đếm chuyển màu cảnh báo nhẹ
+  var gbGoodValue = '';            // giá trị hợp lệ gần nhất (≤ 1000) để hoàn tác khi bị vượt
+  var gbGoodSel = [0, 0];
+  var gbSeg = (typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function')
+    ? new Intl.Segmenter('vi', { granularity: 'grapheme' }) : null;
+
+  function gbNfc(t){ return typeof t.normalize === 'function' ? t.normalize('NFC') : t; }
+  function gbCount(t){ return Array.from(gbNfc(t)).length; }
+  function gbFmt(n){ return String(n); }
+  // Lấy phần đầu của t dài tối đa n ký tự, không bao giờ cắt giữa một ký tự/cụm ký tự (emoji, chữ có dấu).
+  function gbTake(t, n){
+    if (n <= 0) return '';
+    var out = '', used = 0;
+    var parts = gbSeg ? Array.from(gbSeg.segment(t), function(x){ return x.segment; }) : Array.from(t);
+    for (var i = 0; i < parts.length; i++) {
+      var c = Array.from(parts[i]).length;
+      if (used + c > n) break;
+      out += parts[i]; used += c;
+    }
+    return out;
+  }
+  function updateGbCounter(){
+    var n = gbCount(msgInput.value);
+    var el = $('msgCount');
+    el.textContent = gbFmt(n) + '/' + gbFmt(GB_MAX) + ' ký tự';
+    el.className = 'msg-count' + (n >= GB_MAX ? ' full' : (n >= GB_NEAR ? ' near' : ''));
+  }
+  function rememberGbGood(){
+    gbGoodValue = msgInput.value;
+    gbGoodSel = [msgInput.selectionStart || 0, msgInput.selectionEnd || 0];
+  }
+  // Dán: chỉ đưa vào phần còn chỗ, và NÓI RÕ phần nào chưa được thêm (nội dung gốc vẫn ở bộ nhớ tạm).
+  msgInput.addEventListener('paste', function(e){
+    var cd = e.clipboardData || window.clipboardData;
+    if (!cd) return;
+    var text = gbNfc(String(cd.getData('text') || '')).replace(/\r\n|\r|\n/g, ' ');
+    var v = msgInput.value, a = msgInput.selectionStart || 0, b = msgInput.selectionEnd || 0;
+    var room = GB_MAX - gbCount(v.slice(0, a) + v.slice(b));
+    var len = gbCount(text);
+    if (len <= room) return;                     // vừa đủ chỗ → để trình duyệt dán bình thường
+    e.preventDefault();
+    var part = gbTake(text, room);
+    var kept = gbCount(part);
+    if (kept > 0) msgInput.setRangeText(part, a, b, 'end');
+    rememberGbGood();
+    updateGbCounter();
+    setGbStatus(kept > 0
+      ? 'Nội dung dán dài ' + gbFmt(len) + ' ký tự, vượt giới hạn ' + gbFmt(GB_MAX) + '. Chỉ ' + gbFmt(kept) +
+        ' ký tự đầu được đưa vào ô; ' + gbFmt(len - kept) + ' ký tự còn lại CHƯA được thêm (vẫn còn trong bộ nhớ tạm của bạn).'
+      : (room > 0
+          ? 'Ô chỉ còn ' + gbFmt(room) + ' ký tự trống, không đủ cho nội dung dán (' + gbFmt(len) + ' ký tự) nên nội dung này CHƯA được thêm.'
+          : 'Ô đã đủ ' + gbFmt(GB_MAX) + ' ký tự nên nội dung dán (' + gbFmt(len) + ' ký tự) CHƯA được thêm. Hãy rút gọn trước khi dán.'), true);
+  });
+  // Gõ/thả/tự sửa: nếu vượt giới hạn thì hoàn tác đúng lần nhập đó (không xóa chữ đã có) và báo.
+  function onGbInput(e){
+    if ((e && e.isComposing) || gbComposing) { updateGbCounter(); return; }   // đang gõ bộ gõ (IME): chờ gõ xong
+    if (gbCount(msgInput.value) > GB_MAX) {
+      msgInput.value = gbGoodValue;
+      try { msgInput.setSelectionRange(gbGoodSel[0], gbGoodSel[1]); } catch (x) {}
+      setGbStatus('Lời nhắn đã đạt giới hạn ' + gbFmt(GB_MAX) + ' ký tự — phần vừa nhập chưa được thêm.', true);
+    } else {
+      rememberGbGood();
+    }
+    updateGbCounter();
+  }
+  msgInput.addEventListener('input', onGbInput);
+  var gbComposing = false;
+  msgInput.addEventListener('compositionstart', function(){ gbComposing = true; });
+  msgInput.addEventListener('compositionend', function(){ gbComposing = false; onGbInput(null); });
+  ['keyup', 'mouseup', 'select', 'focus'].forEach(function(ev){
+    msgInput.addEventListener(ev, function(){ if (!gbComposing && gbCount(msgInput.value) <= GB_MAX) rememberGbGood(); });
+  });
+  updateGbCounter();
+
   function setGbStatus(text, isErr){
     var el = $('msgStatus');
     el.textContent = text || '';
@@ -946,9 +1029,9 @@
   }
   function submitGuestbook(){
     if (gbPending || !currentSlug) return;
-    var val = msgInput.value.trim();
+    var val = gbNfc(msgInput.value).trim();
     if (!val) { setGbStatus('Vui lòng viết vài dòng trước khi gửi.', true); return; }
-    if (val.length > GB_MAX) { setGbStatus('Lời nhắn dài quá ' + GB_MAX + ' ký tự. Vui lòng rút gọn.', true); return; }
+    if (gbCount(val) > GB_MAX) { setGbStatus('Lời nhắn dài quá ' + GB_MAX + ' ký tự. Vui lòng rút gọn.', true); return; }
     if (val.toLowerCase() === gbLastSent) { setGbStatus('Lời nhắn này đã được gửi và đang chờ gia đình duyệt.', false); return; }
     gbPending = true; sendMsg.disabled = true; setGbStatus('Đang gửi…', false);
     var req = getClient().rpc('post_guestbook_entry', { p_slug: currentSlug, p_message: val });
@@ -957,6 +1040,8 @@
       if (res.error) throw res.error;
       gbLastSent = val.toLowerCase();
       msgInput.value = '';
+      rememberGbGood();
+      updateGbCounter();
       setGbStatus('Cảm ơn bạn. Lời nhắn đã được gửi và sẽ hiển thị sau khi gia đình duyệt.', false);
     }).catch(function(err){
       console.error('[memorial] gửi lời nhắn thất bại:', err && err.message);
