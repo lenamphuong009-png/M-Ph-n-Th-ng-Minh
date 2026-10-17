@@ -133,6 +133,12 @@
   .msg:last-child{border-bottom:1px solid var(--line);}
   .msg-name{font-size:13px;font-weight:500;color:var(--ink);}
   .msg-text{font-size:15px;color:var(--ink-soft);margin-top:2px;}
+  .msg-name bdi{unicode-bidi:isolate;}   /* tên/xưng hô do khách nhập: cô lập hướng chữ, không làm đảo phần xung quanh */
+  .msg-who{display:flex;gap:8px;margin-top:1.5rem;}
+  .msg-who input{flex:1;min-width:0;border:1px solid var(--line);background:transparent;border-radius:2px;padding:0.7rem 0.8rem;font-family:'Be Vietnam Pro',sans-serif;font-size:14px;color:var(--ink);}
+  .msg-who input:focus{outline:none;border-color:var(--brass);}
+  .msg-who + .msg-form{margin-top:8px;}
+  @media (max-width:420px){ .msg-who{flex-direction:column;} }
   .msg-form{display:flex;gap:8px;margin-top:1.5rem;}
   .msg-form input{flex:1;border:1px solid var(--line);background:transparent;border-radius:2px;padding:0.7rem 0.8rem;font-family:'Be Vietnam Pro',sans-serif;font-size:14px;color:var(--ink);}
   .msg-form input:focus{outline:none;border-color:var(--brass);}
@@ -278,6 +284,10 @@
   <h2>Lời nhắn</h2>
   <div id="msgList">
     <div class="msg"><div class="msg-name">Người thân</div><div class="msg-text">Chưa có lời nhắn nào — hãy là người đầu tiên chia sẻ kỷ niệm về ông.</div></div>
+  </div>
+  <div class="msg-who">
+    <input type="text" id="msgName" dir="auto" autocomplete="name" placeholder="Tên của bạn (không bắt buộc)" aria-label="Tên người gửi, không bắt buộc, tối đa 80 ký tự">
+    <input type="text" id="msgRelation" dir="auto" autocomplete="off" placeholder="Cách xưng hô, vd: Cháu nội (không bắt buộc)" aria-label="Cách xưng hô, không bắt buộc, tối đa 60 ký tự">
   </div>
   <div class="msg-form">
     <input type="text" id="msgInput" placeholder="Viết vài dòng tưởng nhớ..." aria-describedby="msgCount">
@@ -984,6 +994,44 @@
   });
   updateGbCounter();
 
+  // ----- Tên người gửi (≤ 80) & cách xưng hô (≤ 60): KHÔNG bắt buộc -----
+  // Làm sạch GIỐNG hàm máy chủ tn_gb_clean_label (Migration 04): NFC → bỏ U+200B/U+FEFF → mọi ký tự điều khiển
+  // và khoảng trắng (kể cả U+00A0, U+1680, U+2000–U+200A, U+2028, U+2029, U+202F, U+205F, U+3000) gộp thành
+  // 1 dấu cách → cắt hai đầu → rỗng thì gửi null. Thêm một bước an toàn mà máy chủ chưa làm: bỏ ký tự định hướng
+  // chữ (U+200E, U+200F, U+202A–U+202E, U+2066–U+2069), U+2060 và U+00AD (vô hình, dễ dùng để giả mạo tên).
+  // GIỮ U+200D/U+200C (cần cho emoji ghép và một số chữ viết). Máy chủ vẫn tự làm sạch & kiểm độ dài lần nữa.
+  var GB_NAME_MAX = 80, GB_REL_MAX = 60;
+  var msgName = document.getElementById('msgName');
+  var msgRelation = document.getElementById('msgRelation');
+  function gbCleanLabel(t){
+    var v = gbNfc(String(t == null ? '' : t));
+    v = v.replace(/[\u200B\uFEFF\u200E\u200F\u202A-\u202E\u2066-\u2069\u2060\u00AD]/g, '');
+    v = v.replace(/[\u0000-\u001F\u007F-\u009F\s\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]+/g, ' ');
+    v = v.trim();
+    return v === '' ? null : v;
+  }
+  // Giới hạn khi nhập (đếm theo điểm mã Unicode sau NFC, như máy chủ): vượt thì hoàn tác đúng lần nhập đó và báo.
+  function gbLimitField(el, max, label){
+    var good = el.value, composing = false;
+    function check(){
+      if (composing) return;
+      if (gbCount(el.value) > max) {
+        el.value = good;
+        setGbStatus(label + ' tối đa ' + gbFmt(max) + ' ký tự — phần vừa nhập chưa được thêm.', true);
+      } else {
+        good = el.value;
+      }
+    }
+    el.addEventListener('input', function(e){ if (!(e && e.isComposing)) check(); });
+    el.addEventListener('compositionstart', function(){ composing = true; });
+    el.addEventListener('compositionend', function(){ composing = false; check(); });
+  }
+  gbLimitField(msgName, GB_NAME_MAX, 'Tên người gửi');
+  gbLimitField(msgRelation, GB_REL_MAX, 'Cách xưng hô');
+  // Enter ở ô tên / xưng hô: chuyển sang ô kế tiếp, KHÔNG gửi (tránh gửi khi chưa viết lời nhắn).
+  msgName.addEventListener('keydown', function(e){ if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); msgRelation.focus(); } });
+  msgRelation.addEventListener('keydown', function(e){ if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); msgInput.focus(); } });
+
   function setGbStatus(text, isErr){
     var el = $('msgStatus');
     el.textContent = text || '';
@@ -992,6 +1040,19 @@
   }
   function gbEmptyText(){
     return 'Chưa có lời nhắn nào — hãy là người đầu tiên chia sẻ kỷ niệm về ' + (gbHonorific || 'ông') + '.';
+  }
+  // Dòng người gửi: "Tên · Xưng hô" | chỉ "Tên" | chỉ "Xưng hô" | "Khách viếng" (lời nhắn cũ / không nhập).
+  // Văn bản thuần (textContent) trong thẻ <bdi> — cô lập hướng chữ để ký tự đảo chiều (vd U+202E) trong tên
+  // không làm đảo dấu " · " hay phần xưng hô bên cạnh.
+  function gbFillSender(el, r){
+    var parts = [r && r.sender_name, r && r.sender_relation]
+      .map(function(v){ return isText(v) ? v.trim() : ''; })
+      .filter(function(v){ return v !== ''; });
+    if (!parts.length) { el.textContent = 'Khách viếng'; return; }
+    parts.forEach(function(p, i){
+      if (i > 0) el.appendChild(document.createTextNode(' · '));
+      var b = document.createElement('bdi'); b.textContent = p; el.appendChild(b);
+    });
   }
   function renderGuestbook(rows){
     msgList.textContent = '';
@@ -1004,13 +1065,13 @@
     }
     rows.forEach(function(r){
       var box = document.createElement('div'); box.className = 'msg';
-      var n = document.createElement('div'); n.className = 'msg-name'; n.textContent = 'Khách viếng';
+      var n = document.createElement('div'); n.className = 'msg-name'; gbFillSender(n, r);
       var t = document.createElement('div'); t.className = 'msg-text'; t.textContent = r.message; // văn bản thuần
       box.appendChild(n); box.appendChild(t); msgList.appendChild(box);
     });
   }
   function loadGuestbook(graveId){
-    var q = getClient().from('guestbook_entries').select('id, message, created_at').eq('grave_id', graveId);
+    var q = getClient().from('guestbook_entries').select('id, message, created_at, sender_name, sender_relation').eq('grave_id', graveId);
     if (IS_PREVIEW) q = q.eq('status', 'approved');
     return q.order('created_at', { ascending: true }).limit(500).then(function(res){
       if (res.error) throw res.error;
@@ -1020,6 +1081,8 @@
   function gbErrorText(err){
     var m = (err && err.message) || '';
     if (/GB_EMPTY/.test(m)) return 'Vui lòng viết vài dòng trước khi gửi.';
+    if (/GB_NAME_TOO_LONG/.test(m)) return 'Tên người gửi dài quá ' + GB_NAME_MAX + ' ký tự. Vui lòng rút gọn.';
+    if (/GB_RELATION_TOO_LONG/.test(m)) return 'Cách xưng hô dài quá ' + GB_REL_MAX + ' ký tự. Vui lòng rút gọn.';
     if (/GB_TOO_LONG/.test(m)) return 'Lời nhắn dài quá ' + GB_MAX + ' ký tự. Vui lòng rút gọn.';
     if (/GB_DUPLICATE/.test(m)) return 'Lời nhắn này đã được gửi trước đó và đang chờ gia đình duyệt.';
     if (/GB_RATE_LIMIT/.test(m)) return 'Bạn vừa gửi khá nhiều lời nhắn. Vui lòng thử lại sau ít phút.';
@@ -1032,9 +1095,16 @@
     var val = gbNfc(msgInput.value).trim();
     if (!val) { setGbStatus('Vui lòng viết vài dòng trước khi gửi.', true); return; }
     if (gbCount(val) > GB_MAX) { setGbStatus('Lời nhắn dài quá ' + GB_MAX + ' ký tự. Vui lòng rút gọn.', true); return; }
+    var who = gbCleanLabel(msgName.value), rel = gbCleanLabel(msgRelation.value);
+    if (who && gbCount(who) > GB_NAME_MAX) { setGbStatus('Tên người gửi dài quá ' + GB_NAME_MAX + ' ký tự. Vui lòng rút gọn.', true); return; }
+    if (rel && gbCount(rel) > GB_REL_MAX) { setGbStatus('Cách xưng hô dài quá ' + GB_REL_MAX + ' ký tự. Vui lòng rút gọn.', true); return; }
     if (val.toLowerCase() === gbLastSent) { setGbStatus('Lời nhắn này đã được gửi và đang chờ gia đình duyệt.', false); return; }
     gbPending = true; sendMsg.disabled = true; setGbStatus('Đang gửi…', false);
-    var req = getClient().rpc('post_guestbook_entry', { p_slug: currentSlug, p_message: val });
+    // Gửi THEO TÊN đúng chữ ký Migration 04: post_guestbook_entry(p_slug, p_message, p_sender_name, p_sender_relation).
+    // Ô để trống → null (máy chủ lưu NULL). Tên & xưng hô được giữ lại trong ô sau khi gửi để tiện gửi tiếp.
+    var req = getClient().rpc('post_guestbook_entry', {
+      p_slug: currentSlug, p_message: val, p_sender_name: who, p_sender_relation: rel
+    });
     if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') req = req.abortSignal(AbortSignal.timeout(15000));
     Promise.resolve(req).then(function(res){
       if (res.error) throw res.error;

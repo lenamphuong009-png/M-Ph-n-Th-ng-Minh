@@ -93,6 +93,9 @@
   .gb-item:first-child{border-top:none;}
   .gb-text{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14.5px;}
   .gb-meta{font-size:12px;color:var(--sage);margin-top:3px;}
+  .gb-who{font-size:13.5px;font-weight:500;overflow-wrap:anywhere;margin-bottom:2px;}
+  .gb-who.none{font-weight:400;color:var(--sage);font-style:italic;}
+  .gb-who bdi{unicode-bidi:isolate;}   /* tên/xưng hô do khách nhập: cô lập hướng chữ */
   .gb-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
   .badge.pending{background:var(--brass);color:var(--ink);}
   .lightbox{position:fixed;inset:0;background:rgba(20,24,30,0.92);display:flex;align-items:center;justify-content:center;z-index:50;padding:1rem;}
@@ -849,7 +852,7 @@
     if (!state.cur) return Promise.resolve();
     var graveId = state.cur.id;
     if (!keepMsg) setMsg($('gbMsg'), 'Đang tải lời nhắn…');
-    return sb.from('guestbook_entries').select('id, message, status, created_at, reviewed_at')
+    return sb.from('guestbook_entries').select('id, message, status, created_at, reviewed_at, sender_name, sender_relation')
       .eq('grave_id', graveId).order('created_at', { ascending: false }).limit(1000)
       .then(function(res){
         if (res.error) throw res.error;
@@ -875,6 +878,14 @@
     }
     items.forEach(function(x){
       var it = document.createElement('div'); it.className = 'gb-item';
+      // Người gửi: văn bản thuần trong <bdi>; thiếu cả tên lẫn xưng hô → ghi rõ khách sẽ thấy "Khách viếng".
+      var who = document.createElement('div'); who.className = 'gb-who';
+      var parts = [x.sender_name, x.sender_relation].filter(function(v){ return typeof v === 'string' && v.trim() !== ''; });
+      if (!parts.length) { who.textContent = 'Không ghi tên (khách sẽ thấy: Khách viếng)'; who.classList.add('none'); }
+      else parts.forEach(function(p, i){
+        if (i) who.appendChild(document.createTextNode(' · '));
+        var bd = document.createElement('bdi'); bd.textContent = p.trim(); who.appendChild(bd);
+      });
       var t = document.createElement('div'); t.className = 'gb-text'; t.textContent = x.message;   // văn bản thuần
       var meta = document.createElement('div'); meta.className = 'gb-meta';
       meta.textContent = 'Gửi lúc ' + fmtTime(x.created_at) + (x.reviewed_at ? ' · Xử lý lúc ' + fmtTime(x.reviewed_at) : '');
@@ -887,7 +898,7 @@
       if (x.status !== 'approved') btn('Duyệt', 'primary', 'approve');
       if (x.status !== 'hidden') btn('Ẩn', '', 'hide');
       btn('Xóa', 'danger', 'delete');
-      it.appendChild(t); it.appendChild(meta); it.appendChild(act);
+      it.appendChild(who); it.appendChild(t); it.appendChild(meta); it.appendChild(act);
       box.appendChild(it);
     });
   }
