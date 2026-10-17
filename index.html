@@ -710,10 +710,10 @@
     if (m.portrait) {
       var img = document.createElement('img');
       img.alt = m.name;
-      img.addEventListener('load', function(){ show($('heroInitial'), false); });
-      img.addEventListener('error', function(){ img.remove(); show($('heroInitial'), true); }); // lỗi ảnh → giữ chữ cái đầu
-      img.src = mediaUrl(m.portrait);
+      img.hidden = true; // chỉ hiện khi đã tải xong (tránh hiện chữ thay thế trong lúc chờ ký link)
+      img.addEventListener('load', function(){ img.hidden = false; show($('heroInitial'), false); });
       $('heroFrame').appendChild(img);
+      attachMedia(img, m.portrait, function(){ img.remove(); show($('heroInitial'), true); }); // lỗi ảnh → giữ chữ cái đầu
     }
     $('heroName').textContent = m.name;
     $('heroSaint').textContent = m.saint ? 'Tên thánh: ' + m.saint : '';
@@ -815,8 +815,48 @@
   // ===== ẢNH & VIDEO (bảng memorial_media + bucket memorial-media) =====
   // Khách: RLS chỉ trả media của trang ĐÃ XUẤT BẢN. Xem trước: người quản lý thấy media trang mình.
   // Lỗi tải media KHÔNG làm hỏng phần còn lại của trang — chỉ ẩn khu ảnh/video.
+  // Bucket memorial-media RIÊNG TƯ: ảnh/video chỉ dùng link ký (signed URL) hạn 1 giờ — KHÔNG dùng link công khai,
+  // và KHÔNG có đường lùi về link công khai khi ký thất bại. Máy chủ chỉ ký khi người xem được phép
+  // (khách: trang đã xuất bản + tệp đang được dùng; người quản lý ở chế độ xem trước: tệp của trang mình).
+  // Ký theo lô, nhớ đệm trong phiên; link còn dưới 5 phút coi như hết hạn. Lỗi tải → ký lại ĐÚNG 1 lần.
+  var SIGN_TTL = 3600, SIGN_MARGIN_MS = 5 * 60 * 1000;
+  var signedUrls = {}; // storage_path → { url, exp }
   function mediaUrl(path){
-    return getClient().storage.from(MEDIA_BUCKET).getPublicUrl(path).data.publicUrl;
+    var s = signedUrls[path];
+    return s && s.exp - Date.now() > SIGN_MARGIN_MS ? s.url : '';
+  }
+  function signPaths(paths, force){
+    var need = paths.filter(function(p, i){ return typeof p === 'string' && p && paths.indexOf(p) === i && (force || !mediaUrl(p)); });
+    if (!need.length) return Promise.resolve();
+    var t0 = Date.now();
+    return getClient().storage.from(MEDIA_BUCKET).createSignedUrls(need, SIGN_TTL).then(function(res){
+      if (res.error) throw res.error;
+      (res.data || []).forEach(function(r){
+        if (!r || typeof r.path !== 'string') return;
+        if (!r.error && typeof r.signedUrl === 'string' && r.signedUrl) signedUrls[r.path] = { url: r.signedUrl, exp: t0 + SIGN_TTL * 1000 };
+        else delete signedUrls[r.path];
+      });
+    });
+  }
+  // Gắn ảnh/video vào phần tử: dùng link đã ký (hoặc ký mới); lỗi tải thì ký lại 1 lần
+  // (video giữ vị trí đang xem); vẫn lỗi → onFail (hiện thông báo, không hiện link nào khác).
+  function attachMedia(el, path, onFail){
+    var retried = false, failed = false;
+    function fail(){ if (!failed) { failed = true; onFail(); } }
+    el.addEventListener('error', function(){
+      if (failed || !el.getAttribute('src')) return;
+      if (retried) { fail(); return; }
+      retried = true;
+      var t = el.tagName === 'VIDEO' ? (el.currentTime || 0) : 0;
+      signPaths([path], true).then(function(){
+        var u = mediaUrl(path); if (!u) { fail(); return; }
+        if (t > 0) el.addEventListener('loadedmetadata', function once(){ el.removeEventListener('loadedmetadata', once); try { el.currentTime = t; } catch (e) {} });
+        el.src = u;
+      }, fail);
+    });
+    var u = mediaUrl(path);
+    if (u) { el.src = u; return; }
+    signPaths([path]).then(function(){ var v = mediaUrl(path); if (v) el.src = v; else fail(); }, fail);
   }
   function loadMedia(graveId){
     return getClient().from('memorial_media')
@@ -840,8 +880,8 @@
       b.type = 'button'; b.className = 'g-item';
       b.setAttribute('aria-label', 'Xem ảnh ' + (i + 1) + (item.caption ? ': ' + item.caption : ''));
       var img = document.createElement('img');
-      img.loading = 'lazy'; img.alt = item.caption || ('Ảnh ' + (i + 1)); img.src = mediaUrl(item.storage_path);
-      img.addEventListener('error', function(){ img.remove(); b.textContent = 'Không tải được ảnh'; b.disabled = true; });
+      img.loading = 'lazy'; img.alt = item.caption || ('Ảnh ' + (i + 1));
+      attachMedia(img, item.storage_path, function(){ img.remove(); b.textContent = 'Không tải được ảnh'; b.disabled = true; });
       b.appendChild(img);
       b.addEventListener('click', function(){ openLightbox(i); });
       grid.appendChild(b);
@@ -856,8 +896,8 @@
     vids.forEach(function(item){
       var card = document.createElement('div'); card.className = 'video-card';
       var v = document.createElement('video');
-      v.controls = true; v.preload = 'metadata'; v.playsInline = true; v.src = mediaUrl(item.storage_path);
-      v.addEventListener('error', function(){
+      v.controls = true; v.preload = 'metadata'; v.playsInline = true;
+      attachMedia(v, item.storage_path, function(){
         var f = document.createElement('div'); f.className = 'video-frame';
         var t = document.createElement('div'); t.className = 'video-cap'; t.textContent = 'Không phát được video này.';
         f.appendChild(t); v.replaceWith(f);
@@ -875,16 +915,39 @@
     if (!galleryItems.length) return;
     lbIndex = (i + galleryItems.length) % galleryItems.length;
     var item = galleryItems[lbIndex];
-    $('lbImg').src = mediaUrl(item.storage_path);
     $('lbImg').alt = item.caption || ('Ảnh ' + (lbIndex + 1));
     $('lbCap').textContent = item.caption || '';
+    setLbImage(item.storage_path);
     $('lbCount').textContent = (lbIndex + 1) + ' / ' + galleryItems.length;
     show($('lbPrev'), galleryItems.length > 1); show($('lbNext'), galleryItems.length > 1);
     show($('lightbox'), true);
     document.body.style.overflow = 'hidden';
     $('lbClose').focus();
   }
-  function closeLightbox(){ show($('lightbox'), false); $('lbImg').removeAttribute('src'); document.body.style.overflow = ''; }
+  // Ảnh phóng to: dùng link đã ký; link quá hạn (trang mở lâu) → ký lại; lỗi tải → ký lại 1 lần rồi báo lỗi.
+  var lbPath = null, lbRetried = false;
+  function lbFail(path){ if (lbPath === path) $('lbCap').textContent = 'Không tải được ảnh này.'; }
+  function setLbImage(path){
+    lbPath = path; lbRetried = false;
+    var img = $('lbImg'); img.removeAttribute('src');
+    var u = mediaUrl(path);
+    if (u) { img.src = u; return; }
+    signPaths([path]).then(function(){
+      if (lbPath !== path) return;
+      var v = mediaUrl(path); if (v) img.src = v; else lbFail(path);
+    }, function(){ lbFail(path); });
+  }
+  $('lbImg').addEventListener('error', function(){
+    var path = lbPath, img = this;
+    if (!path || !img.getAttribute('src')) return;
+    if (lbRetried) { lbFail(path); return; }
+    lbRetried = true;
+    signPaths([path], true).then(function(){
+      if (lbPath !== path) return;
+      var v = mediaUrl(path); if (v) img.src = v; else lbFail(path);
+    }, function(){ lbFail(path); });
+  });
+  function closeLightbox(){ show($('lightbox'), false); lbPath = null; $('lbImg').removeAttribute('src'); document.body.style.overflow = ''; }
   $('lbClose').addEventListener('click', closeLightbox);
   $('lbPrev').addEventListener('click', function(){ openLightbox(lbIndex - 1); });
   $('lbNext').addEventListener('click', function(){ openLightbox(lbIndex + 1); });
@@ -1164,6 +1227,11 @@
         });
       }
       loadMedia(m.id).then(function(items){
+        // Ký 1 lần cho cả lô; lô lỗi thì từng ảnh/video tự ký riêng (attachMedia) — không dùng link công khai.
+        return signPaths(items.map(function(x){ return x.storage_path; })).catch(function(err){
+          console.error('[memorial] ký link ảnh/video thất bại:', err && err.message);
+        }).then(function(){ return items; });
+      }).then(function(items){
         renderGallery(items);
         renderVideos(items);
       }).catch(function(err){

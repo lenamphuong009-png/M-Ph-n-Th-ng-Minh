@@ -344,7 +344,46 @@
     var w = (name || '').normalize('NFC').trim().split(/\s+/);
     return (Array.from(w[w.length - 1] || '')[0] || '').toLocaleUpperCase('vi');
   }
-  function publicUrl(path){ return sb.storage.from(CFG.bucket).getPublicUrl(path).data.publicUrl; }
+  // Bucket RIÊNG TƯ: xem ảnh/video bằng link ký (signed URL) hạn 1 giờ — KHÔNG dùng link công khai, không có
+  // đường lùi về link công khai. Máy chủ chỉ ký tệp của trang tài khoản này được quản lý.
+  // Ký theo lô, nhớ đệm; link còn dưới 5 phút coi như hết hạn; lỗi tải → ký lại ĐÚNG 1 lần.
+  var SIGN_TTL = 3600, SIGN_MARGIN_MS = 5 * 60 * 1000;
+  var signedUrls = {}; // storage_path → { url, exp }
+  function mediaUrl(path){
+    var s = signedUrls[path];
+    return s && s.exp - Date.now() > SIGN_MARGIN_MS ? s.url : '';
+  }
+  function signPaths(paths, force){
+    var need = paths.filter(function(p, i){ return typeof p === 'string' && p && paths.indexOf(p) === i && (force || !mediaUrl(p)); });
+    if (!need.length) return Promise.resolve();
+    var t0 = Date.now();
+    return sb.storage.from(CFG.bucket).createSignedUrls(need, SIGN_TTL).then(function(res){
+      if (res.error) throw res.error;
+      (res.data || []).forEach(function(r){
+        if (!r || typeof r.path !== 'string') return;
+        if (!r.error && typeof r.signedUrl === 'string' && r.signedUrl) signedUrls[r.path] = { url: r.signedUrl, exp: t0 + SIGN_TTL * 1000 };
+        else delete signedUrls[r.path];
+      });
+    });
+  }
+  function attachMedia(el, path, onFail){
+    var retried = false, failed = false;
+    function fail(){ if (!failed) { failed = true; onFail(); } }
+    el.addEventListener('error', function(){
+      if (failed || !el.getAttribute('src')) return;
+      if (retried) { fail(); return; }
+      retried = true;
+      var t = el.tagName === 'VIDEO' ? (el.currentTime || 0) : 0;
+      signPaths([path], true).then(function(){
+        var u = mediaUrl(path); if (!u) { fail(); return; }
+        if (t > 0) el.addEventListener('loadedmetadata', function once(){ el.removeEventListener('loadedmetadata', once); try { el.currentTime = t; } catch (e) {} });
+        el.src = u;
+      }, fail);
+    });
+    var u = mediaUrl(path);
+    if (u) { el.src = u; return; }
+    signPaths([path]).then(function(){ var v = mediaUrl(path); if (v) el.src = v; else fail(); }, fail);
+  }
   function pageUrl(slug, preview){
     var u = new URL('index.html', window.location.href);
     u.search = '?memorial=' + encodeURIComponent(slug) + (preview ? '&preview=1' : '');
@@ -694,9 +733,9 @@
     var box = $('portraitBox'), g = state.cur;
     box.textContent = '';
     if (g.portrait_path) {
-      var img = document.createElement('img'); img.alt = 'Ảnh chân dung'; img.src = publicUrl(g.portrait_path);
-      img.addEventListener('error', function(){ box.textContent = ''; var s = document.createElement('span'); s.textContent = '!'; box.appendChild(s); setMsg($('portraitMsg'), 'Không hiển thị được ảnh chân dung đã lưu. Hãy tải lại ảnh.', 'err'); });
+      var img = document.createElement('img'); img.alt = 'Ảnh chân dung';
       box.appendChild(img);
+      attachMedia(img, g.portrait_path, function(){ box.textContent = ''; var s = document.createElement('span'); s.textContent = '!'; box.appendChild(s); setMsg($('portraitMsg'), 'Không hiển thị được ảnh chân dung đã lưu. Hãy tải lại ảnh.', 'err'); });
     } else {
       var s = document.createElement('span'); s.textContent = initialOf(g.deceased_name); box.appendChild(s);
     }
@@ -728,7 +767,10 @@
       .eq('grave_id', state.cur.id).order('sort_order').order('created_at').then(function(res){
         if (res.error) throw res.error;
         state.media = res.data || [];
-        renderMedia();
+        // Ký 1 lần cho cả danh sách; lỗi thì từng ảnh/video tự ký riêng khi hiển thị.
+        return signPaths(state.media.map(function(m){ return m.storage_path; })).catch(function(err){
+          console.warn('[quanly] ký link ảnh/video thất bại', err && err.message);
+        }).then(renderMedia);
       }).catch(function(err){ setMsg($('imgMsg'), 'Không tải được danh sách ảnh/video: ' + friendly(err), 'err'); });
   }
   function mediaOf(type){ return state.media.filter(function(m){ return m.type === type; }); }
@@ -740,15 +782,16 @@
     items.forEach(function(m, idx){
       var card = document.createElement('div'); card.className = 'm-item';
       var th = document.createElement('div'); th.className = 'thumb';
-      var url = publicUrl(m.storage_path);
       if (type === 'image') {
-        var img = document.createElement('img'); img.loading = 'lazy'; img.alt = m.caption || 'Ảnh'; img.src = url;
-        img.addEventListener('click', function(){ $('lightboxImg').src = url; show($('lightbox'), true); });
-        img.addEventListener('error', function(){ th.textContent = ''; var d = document.createElement('div'); d.className = 'broken'; d.textContent = 'Không hiển thị được ảnh này'; th.appendChild(d); });
+        var img = document.createElement('img'); img.loading = 'lazy'; img.alt = m.caption || 'Ảnh';
+        // Phóng to dùng đúng link ảnh đã tải được (đã ký) — không tạo link mới, không dùng link công khai.
+        img.addEventListener('click', function(){ if (img.currentSrc) { $('lightboxImg').src = img.currentSrc; show($('lightbox'), true); } });
         th.appendChild(img);
+        attachMedia(img, m.storage_path, function(){ th.textContent = ''; var d = document.createElement('div'); d.className = 'broken'; d.textContent = 'Không hiển thị được ảnh này'; th.appendChild(d); });
       } else {
-        var v = document.createElement('video'); v.controls = true; v.preload = 'metadata'; v.playsInline = true; v.src = url;
+        var v = document.createElement('video'); v.controls = true; v.preload = 'metadata'; v.playsInline = true;
         th.appendChild(v);
+        attachMedia(v, m.storage_path, function(){ th.textContent = ''; var d = document.createElement('div'); d.className = 'broken'; d.textContent = 'Không phát được video này'; th.appendChild(d); });
       }
       var body = document.createElement('div'); body.className = 'body';
       var cap = document.createElement('input'); cap.type = 'text'; cap.maxLength = 300; cap.placeholder = 'Chú thích (không bắt buộc)'; cap.value = m.caption || '';
