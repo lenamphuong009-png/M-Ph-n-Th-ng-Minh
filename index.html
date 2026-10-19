@@ -734,7 +734,8 @@
       var text = document.createElement('div'); text.className = 't-text'; text.textContent = t.text;
       item.appendChild(year); item.appendChild(text); list.appendChild(item);
     });
-    show($('secTimeline'), m.timeline.length > 0);
+    show($('timelineList'), m.timeline.length > 0);
+    show($('secTimeline'), true);
   }
 
   function renderWishes(m){
