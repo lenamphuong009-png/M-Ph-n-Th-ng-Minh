@@ -221,8 +221,6 @@
       </div>
       <label class="f" for="fEpigraph">Câu trích dẫn đầu trang <span class="hint">(tối đa 500 ký tự)</span></label>
       <textarea id="fEpigraph" maxlength="500" style="min-height:60px"></textarea>
-      <label class="f" for="fIntro">Tiểu sử / lời giới thiệu <span class="hint">(tối đa 3000 ký tự)</span></label>
-      <textarea id="fIntro" maxlength="3000" style="min-height:140px"></textarea>
       <label class="f" for="fFooter">Dòng ghi chú cuối trang <span class="hint">(tối đa 300 ký tự)</span></label>
       <input type="text" id="fFooter" maxlength="300">
     </div>
@@ -559,8 +557,8 @@
   });
 
   // ===== CHỈNH SỬA =====
-  var GRAVE_EDIT_COLS = 'id, memorial_slug, deceased_name, saint_name, birth_label, death_label, epigraph, intro, honorific, portrait_path, timeline, wishes, footer_note, is_published';
-  var FIELD_MAP = { fName:'deceased_name', fSaint:'saint_name', fHonorific:'honorific', fBirth:'birth_label', fDeath:'death_label', fEpigraph:'epigraph', fIntro:'intro', fFooter:'footer_note' };
+  var GRAVE_EDIT_COLS = 'id, memorial_slug, deceased_name, saint_name, birth_label, death_label, epigraph, honorific, portrait_path, timeline, wishes, footer_note, is_published';
+  var FIELD_MAP = { fName:'deceased_name', fSaint:'saint_name', fHonorific:'honorific', fBirth:'birth_label', fDeath:'death_label', fEpigraph:'epigraph', fFooter:'footer_note' };
 
   function markDirty(){ state.dirty = true; var s = $('saveStatus'); s.textContent = 'Có thay đổi chưa lưu.'; s.className = 'status dirty'; }
   function markSaved(text){ state.dirty = false; var s = $('saveStatus'); s.textContent = text; s.className = 'status'; }

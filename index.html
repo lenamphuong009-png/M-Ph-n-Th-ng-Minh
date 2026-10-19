@@ -207,10 +207,6 @@
   <button class="light-btn" id="retryBtn" type="button" hidden>Thử lại</button>
 </div>
 
-<section class="intro reveal" id="secIntro" hidden>
-  <p id="introText"></p>
-</section>
-
 <section class="reveal" id="secTimeline" hidden>
   <div class="eyebrow">Dòng đời</div>
   <h2>Những dấu mốc</h2>
@@ -608,7 +604,7 @@
   // Danh sách cột cố định — KHÔNG dùng select('*') (anon chỉ được cấp quyền theo cột).
   var GRAVE_COLUMNS = [
     'id', 'deceased_name', 'saint_name', 'birth_label', 'death_label', 'epigraph',
-    'intro', 'honorific', 'portrait_path', 'timeline', 'wishes', 'footer_note',
+    'honorific', 'portrait_path', 'timeline', 'wishes', 'footer_note',
     'is_published', 'incense_count'
   ].join(',');
   var PATH_RE = /^[0-9a-f-]{36}\/(images\/[0-9a-f-]{36}\.(jpg|jpeg|png|webp)|videos\/[0-9a-f-]{36}\.(mp4|webm|mov))$/;
@@ -679,7 +675,6 @@
       birth: isText(row.birth_label) ? row.birth_label.trim() : '',
       death: isText(row.death_label) ? row.death_label.trim() : '',
       epigraph: isText(row.epigraph) ? row.epigraph.trim() : '',
-      intro: isText(row.intro) ? row.intro.trim() : '',
       honorific: isText(row.honorific) ? row.honorific.trim() : '',
       timeline: timeline,
       wishes: wishes,
@@ -718,11 +713,6 @@
     show($('heroSaint'), !!m.saint);
     show($('heroDates'), !!dates);
     show($('heroEpigraph'), !!m.epigraph);
-  }
-
-  function renderIntro(m){
-    $('introText').textContent = m.intro;
-    show($('secIntro'), !!m.intro);
   }
 
   function renderTimeline(m){
@@ -1200,7 +1190,6 @@
       var m = validateMemorial(row);
       if (!m) { showState('notfound'); return; }
       renderHero(m);
-      renderIntro(m);
       renderTimeline(m);
       renderWishes(m);
       renderIncenseCount(m);
