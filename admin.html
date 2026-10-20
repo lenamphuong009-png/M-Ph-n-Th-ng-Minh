@@ -101,11 +101,26 @@
   .lightbox{position:fixed;inset:0;background:rgba(20,24,30,0.92);display:flex;align-items:center;justify-content:center;z-index:50;padding:1rem;}
   .lightbox img{max-width:100%;max-height:100%;object-fit:contain;}
   .lightbox button{position:absolute;top:12px;right:12px;}
+  .qr-wrap{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-top:0.6rem;}
+  .qr-wrap img{width:220px;max-width:100%;height:auto;border:1px solid var(--line);background:#fff;flex:none;}
+  .qr-wrap .grow{flex:1 1 220px;min-width:0;}
+  .qr-wrap code{display:block;background:var(--paper-deep);padding:4px 8px;border-radius:2px;font-size:12.5px;overflow-wrap:anywhere;margin-top:0.3rem;}
+  .qr-test{display:inline-block;background:var(--danger);color:#fff;font-size:11.5px;letter-spacing:0.06em;font-weight:500;padding:3px 8px;border-radius:2px;margin-top:0.4rem;}
+  /* Chừa chỗ cho thanh nút cố định ở đáy: khi cuộn/di chuyển tới một nút (bàn phím, liên kết, cuộn tới phần tử),
+     trình duyệt dừng phần tử phía trên thanh, không để thanh che. */
+  html{scroll-padding-bottom:96px;}
+  .qr-wrap .actions{scroll-margin-bottom:24px;}
   @media (max-width:560px){
     .row2{grid-template-columns:1fr;}
     h1{font-size:26px;}
     main{padding:1.25rem 0.85rem 5rem;}
-    .sticky{margin-left:-0.85rem;margin-right:-0.85rem;padding:0.65rem 0.85rem;}
+    .sticky{margin-left:-0.85rem;margin-right:-0.85rem;padding:0.5rem 0.85rem;gap:6px;}
+    /* Điện thoại: dòng trạng thái gọn ở trên, 3 nút trên một hàng — thanh thấp hơn, che ít nội dung hơn */
+    .sticky .status{flex:1 1 100%;font-size:12px;line-height:1.35;}
+    .sticky .btn{flex:1 1 0;min-width:0;padding:0.5rem 0.35rem;font-size:13px;}
+    html{scroll-padding-bottom:112px;}
+    .qr-wrap img{width:100%;max-width:260px;margin:0 auto;}
+    .qr-wrap .actions .btn{flex:1 1 140px;padding:0.6rem 0.7rem;font-size:13.5px;}
   }
 </style>
 </head>
@@ -204,6 +219,26 @@
         <h1 id="edTitle"></h1>
         <div class="muted">Trạng thái: <span class="badge" id="edBadge"></span></div>
         <div class="link-box"><span class="muted">Đường dẫn công khai:</span><code id="edLink"></code><button type="button" class="btn small" id="copyLinkBtn">Sao chép</button></div>
+      </div>
+    </div>
+
+    <div class="card" id="qrCard">
+      <h2>Mã QR</h2>
+      <div class="msg" id="qrState" role="status"></div>
+      <div id="qrBody" hidden>
+        <div class="qr-wrap">
+          <img id="qrImg" alt="Mã QR dẫn tới trang tưởng niệm">
+          <div class="grow">
+            <div class="qr-test" id="qrTestBadge" hidden>QR THỬ NGHIỆM — KHÔNG BÀN GIAO</div>
+            <div class="muted" style="margin-top:0.4rem">Đường dẫn trong mã QR:</div>
+            <code id="qrUrl"></code>
+            <div class="actions">
+              <button type="button" class="btn small" id="qrDownloadBtn">Tải PNG</button>
+              <button type="button" class="btn small" id="qrCopyBtn">Sao chép đường dẫn</button>
+            </div>
+            <div class="muted" style="margin-top:0.5rem">Trên iPhone: nếu bấm "Tải PNG" không lưu được tệp, hãy nhấn giữ vào ảnh mã QR rồi chọn "Lưu vào Ảnh".</div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -306,6 +341,12 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"
         integrity="sha384-BWcjm9OdFth9TbhCxZPdm+gAOUMAzQy9nmTs12ioXdCcbVnJaPMn+fMUoQCLt60R"
         crossorigin="anonymous"></script>
+<!-- Thư viện tạo mã QR: qrcode-generator 2.0.4 (Kazuhiko Arase, giấy phép MIT — giữ nguyên trong tệp).
+     Chép nguyên văn dist/qrcode.js từ gói npm (npm integrity sha512-mZSiP6RnbHl4xL2Ap5HfkjLnmxfKcPWpWe/c+5XxCuetEenqmNFf1FH/ftXPCtFG5/TDobjsjz6sSNL0Sr8Z9g==).
+     sha256 của tệp: 79ec86f82856005b1c887905cfccfcfbec3821ca61c7fd5a952faa5f778f791c
+     QR được vẽ ngay trong trình duyệt — KHÔNG gửi đường dẫn của khách tới dịch vụ bên ngoài. -->
+<script src="vendor/qrcode-generator-2.0.4.js"
+        integrity="sha384-e9EFD6BGC90bkW9aDV5xbbBfzwN7G8YImHao2lfLVKV/hPB0E0go+H3I64h7oHtA"></script>
 <script>
   // ===== CẤU HÌNH — STAGING =====
   // Chỉ dùng publishable key (công khai). Quyền thật do RLS/Storage policy trên Supabase quyết định.
@@ -382,8 +423,10 @@
     if (u) { el.src = u; return; }
     signPaths([path]).then(function(){ var v = mediaUrl(path); if (v) el.src = v; else fail(); }, fail);
   }
+  // Dạng URL thống nhất với mã QR: <thư mục gốc>/?memorial=<slug> (không ghi "index.html").
+  // Máy chủ trả index.html cho thư mục gốc nên dạng cũ /index.html?memorial=… vẫn mở đúng trang.
   function pageUrl(slug, preview){
-    var u = new URL('index.html', window.location.href);
+    var u = new URL('./', window.location.href);
     u.search = '?memorial=' + encodeURIComponent(slug) + (preview ? '&preview=1' : '');
     return u.toString();
   }
@@ -597,7 +640,120 @@
     renderPortrait();
     renderRepeater('tl', Array.isArray(g.timeline) ? g.timeline : []);
     renderRepeater('ws', Array.isArray(g.wishes) ? g.wishes : []);
+    renderQr();
   }
+
+  // ===== MÃ QR =====
+  // Đường dẫn in vào QR lấy từ bảng CỐ ĐỊNH theo tên miền đang mở trang quản lý — KHÔNG lấy từ
+  // window.location, KHÔNG có giá trị mặc định. Tên miền không có trong bảng → không tạo QR.
+  // Production: CHƯA KHAI BÁO. Chỉ thêm khi chủ dự án đã chốt tên miền Engine vĩnh viễn, dạng:
+  //   '<tên miền trang quản lý>': { mode: 'handover', base: 'https://<tên miền công khai>/' }
+  // Chưa có dòng 'handover' nào → hệ thống không thể tạo QR bàn giao thật.
+  var QR_ENVS = {
+    'engine-v1--glittery-swan-23c695.netlify.app': { mode: 'test', base: 'https://engine-v1--glittery-swan-23c695.netlify.app/' }
+  };
+  var QR_ENV = Object.prototype.hasOwnProperty.call(QR_ENVS, window.location.hostname) ? QR_ENVS[window.location.hostname] : null;
+  var QR_TEST_LABEL = 'QR THỬ NGHIỆM — KHÔNG BÀN GIAO';
+  var qrCur = null; // { url, slug, test, canvas } — chỉ có khi trang đã xuất bản (theo dữ liệu máy chủ)
+
+  // Vẽ mã QR lên canvas: mức sửa lỗi M, lề trắng 4 ô. Bản thử nghiệm có viền đỏ và dòng chữ cảnh báo
+  // ở dải trên/dưới — nằm NGOÀI vùng mã nên vẫn quét được, và có sẵn trong ảnh PNG tải xuống.
+  function drawQr(url, isTest){
+    var qr = qrcode(0, 'M');
+    qr.addData(url);
+    qr.make();
+    var n = qr.getModuleCount(), quiet = 4;
+    var cell = Math.max(4, Math.floor(1024 / (n + quiet * 2)));
+    var qrPx = cell * (n + quiet * 2);
+    var border = isTest ? 18 : 0, band = isTest ? 110 : 0;
+    var c = document.createElement('canvas');
+    c.width = qrPx + border * 2;
+    c.height = qrPx + band * 2 + border * 2;
+    var ctx = c.getContext('2d');
+    ctx.fillStyle = isTest ? '#B0553F' : '#FFFFFF';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(border, border, qrPx, qrPx + band * 2);
+    var ox = border + quiet * cell, oy = border + band + quiet * cell;
+    ctx.fillStyle = '#000000';
+    for (var r = 0; r < n; r++) for (var col = 0; col < n; col++) {
+      if (qr.isDark(r, col)) ctx.fillRect(ox + col * cell, oy + r * cell, cell, cell);
+    }
+    if (isTest) {
+      ctx.fillStyle = '#B0553F';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      var fs = 46;
+      do { ctx.font = 'bold ' + fs + 'px Arial, "Helvetica Neue", sans-serif'; fs -= 2; }
+      while (fs > 18 && ctx.measureText(QR_TEST_LABEL).width > qrPx - 40);
+      ctx.fillText(QR_TEST_LABEL, c.width / 2, border + band / 2);
+      ctx.fillText(QR_TEST_LABEL, c.width / 2, border + band + qrPx + band / 2);
+    }
+    return c;
+  }
+
+  function renderQr(){
+    var g = state.cur;
+    qrCur = null;
+    show($('qrBody'), false);
+    $('qrImg').removeAttribute('src');
+    $('qrUrl').textContent = '';
+    show($('qrTestBadge'), false);
+    if (!g || g.is_published !== true) {
+      setMsg($('qrState'), 'Trang chưa xuất bản — chưa có mã QR bàn giao. Mã QR chỉ xuất hiện sau khi trang được xuất bản thành công.');
+      return;
+    }
+    if (!QR_ENV) {
+      setMsg($('qrState'), 'Môi trường này chưa được cấu hình tên miền công khai — không tạo mã QR.', 'err');
+      return;
+    }
+    var slug = g.memorial_slug;
+    if (typeof slug !== 'string' || slug.length < 3 || slug.length > 100 || !SLUG_RE.test(slug) || !/^https:\/\//.test(QR_ENV.base)) {
+      setMsg($('qrState'), 'Đường dẫn của trang không hợp lệ — không tạo mã QR.', 'err');
+      return;
+    }
+    if (typeof window.qrcode !== 'function') {
+      setMsg($('qrState'), 'Không tải được thư viện tạo mã QR. Các chức năng quản lý khác không bị ảnh hưởng — hãy tải lại trang.', 'err');
+      return;
+    }
+    var url = QR_ENV.base + '?memorial=' + encodeURIComponent(slug);
+    var isTest = QR_ENV.mode !== 'handover';
+    var canvas;
+    try { canvas = drawQr(url, isTest); }
+    catch (e) { setMsg($('qrState'), 'Không tạo được mã QR cho trang này.', 'err'); return; }
+    qrCur = { url: url, slug: slug, test: isTest, canvas: canvas };
+    $('qrImg').src = canvas.toDataURL('image/png');
+    $('qrUrl').textContent = url;
+    show($('qrTestBadge'), isTest);
+    show($('qrBody'), true);
+    setMsg($('qrState'), isTest
+      ? 'Đây là mã QR THỬ NGHIỆM của môi trường staging — KHÔNG bàn giao cho khách.'
+      : 'Mã QR bàn giao của trang đã xuất bản.', isTest ? 'err' : 'ok');
+  }
+
+  $('qrDownloadBtn').addEventListener('click', function(){
+    if (!qrCur) return;
+    var name = (qrCur.test ? 'QR-THU-NGHIEM-' : 'QR-') + qrCur.slug + '.png';
+    var cur = qrCur;
+    var a = document.createElement('a');
+    if (!('download' in a) || !cur.canvas.toBlob) {
+      setMsg($('qrState'), 'Trình duyệt này không tải tệp trực tiếp được — hãy nhấn giữ vào ảnh mã QR rồi chọn "Lưu ảnh".', 'err');
+      return;
+    }
+    cur.canvas.toBlob(function(blob){
+      if (!blob) { setMsg($('qrState'), 'Không tạo được tệp PNG — hãy nhấn giữ vào ảnh mã QR để lưu.', 'err'); return; }
+      var u = URL.createObjectURL(blob);
+      a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function(){ URL.revokeObjectURL(u); }, 4000);
+    }, 'image/png');
+  });
+
+  $('qrCopyBtn').addEventListener('click', function(){
+    if (!qrCur) return;
+    var t = qrCur.url;
+    (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function(){
+      setMsg($('editMsg'), 'Đã sao chép đường dẫn trong mã QR.', 'ok');
+    }).catch(function(){ prompt('Sao chép đường dẫn:', t); });
+  });
 
   // --- Danh sách lặp: dòng thời gian (tl) & di nguyện (ws) ---
   var REP = {
@@ -686,7 +842,7 @@
   $('publishBtn').addEventListener('click', function(){
     var willPublish = !state.cur.is_published;
     var q = willPublish ? 'Xuất bản trang này? Sau khi xuất bản, bất kỳ ai có đường dẫn đều xem được.'
-                        : 'Ngừng xuất bản? Khách sẽ không xem được trang này nữa (dữ liệu vẫn được giữ).';
+                        : 'Ngừng xuất bản? Khách sẽ không xem được trang này nữa (dữ liệu vẫn được giữ). Mã QR đã in hoặc đã gửi sẽ tạm không mở được trang cho tới khi xuất bản lại.';
     if (!confirm(q)) return;
     var chain = state.dirty ? save() : Promise.resolve();
     chain.then(function(){
