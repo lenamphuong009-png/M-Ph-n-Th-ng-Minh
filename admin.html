@@ -83,6 +83,17 @@
   .upload-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:0.6rem;}
   .upload-row input[type=file]{font-size:13px;font-family:inherit;max-width:100%;}
   .busy{font-size:13px;color:var(--brass);}
+  .consent{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;margin-top:0.8rem;cursor:pointer;}
+  .consent input{margin-top:3px;}
+  .a-list{display:flex;flex-direction:column;gap:10px;margin-top:0.8rem;}
+  .a-item{border:1px solid var(--line);border-radius:3px;background:var(--paper);padding:0.6rem;display:flex;flex-direction:column;gap:6px;}
+  .a-item audio{width:100%;}
+  .a-item textarea{min-height:60px;font-size:13px;}
+  .a-item input[type=text]{font-size:13.5px;padding:0.4rem 0.5rem;}
+  .a-item .broken{font-size:12.5px;color:var(--danger);}
+  .a-item .tools{display:flex;gap:4px;flex-wrap:wrap;}
+  .a-item .tools button{border:1px solid var(--line);background:none;border-radius:2px;padding:0.25rem 0.5rem;cursor:pointer;font-family:inherit;font-size:12px;color:var(--ink-soft);}
+  .a-item .tools button.del{color:var(--danger);border-color:rgba(176,85,63,0.4);}
   .link-box{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:0.4rem;}
   .link-box code{background:var(--paper-deep);padding:3px 8px;border-radius:2px;font-size:12.5px;overflow-wrap:anywhere;}
   .gb-tabs{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:0.8rem;}
@@ -311,6 +322,26 @@
       </div>
       <div class="msg" id="vidMsg" role="alert"></div>
       <div class="media-grid" id="vidGrid"></div>
+    </div>
+
+    <div class="card" id="audioCard">
+      <h2>Ghi âm kỷ niệm</h2>
+      <div class="muted">MP3, WAV, M4A hoặc OGG, tối đa 20MB mỗi tệp. Mỗi bản ghi cần tiêu đề và xác nhận quyền sử dụng. Khách chỉ nghe được khi trang đã xuất bản.</div>
+      <label class="f" for="audFile">Tệp âm thanh</label>
+      <div class="upload-row" style="margin-top:0">
+        <input type="file" id="audFile" accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a,audio/m4a,audio/ogg,.mp3,.wav,.m4a,.ogg">
+      </div>
+      <label class="f" for="audTitle">Tiêu đề <span class="hint">(bắt buộc, tối đa 150 ký tự)</span></label>
+      <input type="text" id="audTitle" maxlength="150" placeholder="VD: Lời dặn dò">
+      <label class="f" for="audDesc">Mô tả <span class="hint">(không bắt buộc, tối đa 500 ký tự)</span></label>
+      <textarea id="audDesc" maxlength="500"></textarea>
+      <label class="consent"><input type="checkbox" id="audConsent"> Tôi xác nhận có quyền sử dụng và chia sẻ bản ghi âm này trên trang tưởng niệm.</label>
+      <div class="upload-row">
+        <button type="button" class="btn small" id="audUploadBtn">Tải ghi âm lên</button>
+        <span class="busy" id="audBusy"></span>
+      </div>
+      <div class="msg" id="audMsg" role="alert"></div>
+      <div class="a-list" id="audList"></div>
     </div>
 
     <div class="card" id="gbCard">
@@ -917,7 +948,7 @@
 
   // --- Album ảnh & video (bảng memorial_media) ---
   function loadMedia(){
-    return sb.from('memorial_media').select('id, type, storage_path, caption, sort_order, created_at')
+    return sb.from('memorial_media').select('id, type, storage_path, caption, title, description, sort_order, created_at')
       .eq('grave_id', state.cur.id).order('sort_order').order('created_at').then(function(res){
         if (res.error) throw res.error;
         state.media = res.data || [];
@@ -928,7 +959,7 @@
       }).catch(function(err){ setMsg($('imgMsg'), 'Không tải được danh sách ảnh/video: ' + friendly(err), 'err'); });
   }
   function mediaOf(type){ return state.media.filter(function(m){ return m.type === type; }); }
-  function renderMedia(){ renderMediaGrid('image', $('imgGrid')); renderMediaGrid('video', $('vidGrid')); }
+  function renderMedia(){ renderMediaGrid('image', $('imgGrid')); renderMediaGrid('video', $('vidGrid')); renderAudio(); }
   function renderMediaGrid(type, grid){
     grid.textContent = '';
     var items = mediaOf(type);
@@ -964,7 +995,7 @@
       grid.appendChild(card);
     });
   }
-  function msgEl(type){ return type === 'image' ? $('imgMsg') : $('vidMsg'); }
+  function msgEl(type){ return type === 'image' ? $('imgMsg') : (type === 'audio' ? $('audMsg') : $('vidMsg')); }
   function updateCaption(m, value, type){
     var v = trimOrNull(value);
     sb.from('memorial_media').update({ caption: v }).eq('id', m.id).select('id, caption').maybeSingle().then(function(res){
@@ -1031,6 +1062,128 @@
   }
   $('imgUploadBtn').addEventListener('click', function(){ uploadMedia('image', $('imgFiles').files, $('imgBusy'), this); });
   $('vidUploadBtn').addEventListener('click', function(){ uploadMedia('video', $('vidFile').files, $('vidBusy'), this); });
+
+  // --- Ghi âm kỷ niệm (memorial_media type 'audio') ---
+  // Tệp: <mã trang>/audios/<uuid>.<mp3|m4a|wav|ogg> trong bucket riêng tư; nghe bằng link ký 1 giờ.
+  // Thứ tự lưu: tải TỆP lên trước → ghi DÒNG sau (máy chủ còn kiểm tệp có thật bằng trigger tn_media_check_object).
+  // Ghi dòng lỗi → gỡ tệp vừa tải. Xác nhận quyền: máy chủ tự ghi giờ (trigger tn_media_rights_now).
+  // Khách chỉ nghe được khi trang ĐÃ XUẤT BẢN, bản ghi có tiêu đề và đã xác nhận quyền (hàm tn_media_public_ok, S-1b).
+  var AUD_EXT_TYPE = { mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', ogg: 'audio/ogg' };
+  var AUD_TYPE_EXT = { 'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/m4a': 'm4a',
+                       'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/wave': 'wav', 'audio/vnd.wave': 'wav', 'audio/ogg': 'ogg' };
+  var AUD_MAX = 20 * 1024 * 1024, AUD_TITLE_MAX = 150, AUD_DESC_MAX = 500; // khớp mm_title_len / mm_description_len
+  var audBusy = false;
+  function audExt(file){
+    var m = /\.([a-z0-9]+)$/.exec(((file && file.name) || '').toLowerCase());
+    if (m && AUD_EXT_TYPE[m[1]]) return m[1];
+    return (file && AUD_TYPE_EXT[file.type]) || null;
+  }
+  function checkAudioInput(file, title, desc){
+    if (!file) return 'Vui lòng chọn một tệp âm thanh.';
+    if (file.size === 0) return '"' + file.name + '": tệp rỗng hoặc không đọc được.';
+    if (file.size > AUD_MAX) return '"' + file.name + '": vượt quá 20MB.';
+    if (!audExt(file)) return '"' + file.name + '": chỉ nhận MP3, WAV, M4A hoặc OGG.';
+    return checkAudioText(title, desc);
+  }
+  function checkAudioText(title, desc){
+    if (!title) return 'Vui lòng đặt tiêu đề cho bản ghi âm.';
+    if (Array.from(title).length > AUD_TITLE_MAX) return 'Tiêu đề tối đa 150 ký tự.';
+    if (Array.from(desc).length > AUD_DESC_MAX) return 'Mô tả tối đa 500 ký tự.';
+    return null;
+  }
+  function audioErr(err){
+    var m = (err && (err.message || err.error)) || '';
+    if (/mime|content type|invalid_mime/i.test(m)) return 'Máy chủ không nhận định dạng tệp này. Vui lòng chọn MP3, WAV, M4A hoặc OGG.';
+    return friendly(err);
+  }
+  function renderAudio(){
+    var list = $('audList'); list.textContent = '';
+    var items = mediaOf('audio');
+    if (!items.length) { var p = document.createElement('div'); p.className = 'muted'; p.textContent = 'Chưa có bản ghi âm.'; list.appendChild(p); return; }
+    items.forEach(function(m, idx){
+      var card = document.createElement('div'); card.className = 'a-item';
+      var title = document.createElement('input'); title.type = 'text'; title.maxLength = AUD_TITLE_MAX; title.value = m.title || ''; title.setAttribute('aria-label', 'Tiêu đề bản ghi âm');
+      var desc = document.createElement('textarea'); desc.maxLength = AUD_DESC_MAX; desc.value = m.description || ''; desc.placeholder = 'Mô tả (không bắt buộc)'; desc.setAttribute('aria-label', 'Mô tả bản ghi âm');
+      var audio = document.createElement('audio'); audio.controls = true; audio.preload = 'none';
+      var tools = document.createElement('div'); tools.className = 'tools';
+      var bSave = document.createElement('button'); bSave.type = 'button'; bSave.textContent = 'Lưu thông tin';
+      var bUp = document.createElement('button'); bUp.type = 'button'; bUp.textContent = '↑'; bUp.title = 'Đưa lên trước'; bUp.disabled = idx === 0;
+      var bDown = document.createElement('button'); bDown.type = 'button'; bDown.textContent = '↓'; bDown.title = 'Đưa xuống sau'; bDown.disabled = idx === items.length - 1;
+      var bDel = document.createElement('button'); bDel.type = 'button'; bDel.textContent = 'Xóa'; bDel.className = 'del';
+      bSave.addEventListener('click', function(){ saveAudioInfo(m, title.value, desc.value, bSave); });
+      bUp.addEventListener('click', function(){ if (!audBusy) moveMedia('audio', idx, -1); });
+      bDown.addEventListener('click', function(){ if (!audBusy) moveMedia('audio', idx, 1); });
+      bDel.addEventListener('click', function(){ deleteAudio(m, audio); });
+      tools.appendChild(bSave); tools.appendChild(bUp); tools.appendChild(bDown); tools.appendChild(bDel);
+      card.appendChild(title); card.appendChild(desc); card.appendChild(audio); card.appendChild(tools);
+      list.appendChild(card);
+      attachMedia(audio, m.storage_path, function(){
+        audio.remove(); var d = document.createElement('div'); d.className = 'broken'; d.textContent = 'Không phát được tệp ghi âm này.'; card.insertBefore(d, tools);
+      });
+    });
+  }
+  function saveAudioInfo(m, titleVal, descVal, btn){
+    var t = (titleVal || '').trim(), d = (descVal || '').trim(), e = checkAudioText(t, d);
+    if (e) { setMsg($('audMsg'), e, 'err'); return; }
+    btn.disabled = true;
+    sb.from('memorial_media').update({ title: t, description: d || null }).eq('id', m.id).select('id, title, description').maybeSingle().then(function(res){
+      if (res.error) throw res.error;
+      if (!res.data) throw { code: '42501', message: 'Không có quyền.' };
+      m.title = res.data.title; m.description = res.data.description;
+      setMsg($('audMsg'), 'Đã lưu tiêu đề và mô tả.', 'ok');
+    }).catch(function(err){ setMsg($('audMsg'), audioErr(err), 'err'); }).then(function(){ btn.disabled = false; });
+  }
+  // Xóa: xóa DÒNG trước (máy chủ kiểm quyền) → khách mất quyền nghe ngay; rồi xóa TỆP.
+  // Không xóa được tệp → báo rõ (tệp không còn dòng nên khách không xin được link).
+  function deleteAudio(m, audioEl){
+    if (audBusy || !confirm('Xóa vĩnh viễn bản ghi âm "' + (m.title || '') + '"? Không thể khôi phục.')) return;
+    audBusy = true; try { audioEl.pause(); } catch (e) {}
+    var fileLeft = false;
+    sb.from('memorial_media').delete().eq('id', m.id).select('id').maybeSingle().then(function(res){
+      if (res.error) throw res.error;
+      if (!res.data) throw { code: '42501', message: 'Không có quyền.' };
+      return sb.storage.from(CFG.bucket).remove([m.storage_path]).then(function(r){
+        if (r && r.error) { fileLeft = true; console.warn('[quanly] chưa xóa được tệp ghi âm', m.storage_path, r.error); }
+      }, function(e){ fileLeft = true; console.warn('[quanly] chưa xóa được tệp ghi âm', m.storage_path, e); });
+    }).then(function(){
+      setMsg($('audMsg'), fileLeft ? 'Đã xóa bản ghi âm khỏi trang. Tệp gốc chưa dọn được trên kho lưu trữ (khách không nghe được) — báo kỹ thuật để dọn.' : 'Đã xóa bản ghi âm.', fileLeft ? 'err' : 'ok');
+    }, function(err){ setMsg($('audMsg'), audioErr(err), 'err'); })
+      .then(function(){ audBusy = false; return loadMedia(); });
+  }
+  $('audUploadBtn').addEventListener('click', function(){
+    if (audBusy || !state.cur) return;
+    var f = $('audFile').files[0], t = $('audTitle').value.trim(), d = $('audDesc').value.trim();
+    var e = checkAudioInput(f, t, d);
+    if (e) { setMsg($('audMsg'), e, 'err'); return; }
+    if (!$('audConsent').checked) { setMsg($('audMsg'), 'Vui lòng xác nhận bạn có quyền sử dụng tệp này trước khi tải lên.', 'err'); return; }
+    var btn = this, ext = audExt(f), graveId = state.cur.id;
+    var path = graveId + '/audios/' + uuid() + '.' + ext, uploaded = false;
+    var maxOrder = mediaOf('audio').reduce(function(mx, x){ return Math.max(mx, x.sort_order || 0); }, 0);
+    audBusy = true; btn.disabled = true; setMsg($('audMsg'), ''); $('audBusy').textContent = 'Đang tải tệp lên…';
+    // supabase-js gửi tệp dạng multipart: gắn định dạng chuẩn theo đuôi để máy chủ không từ chối tệp có định dạng trống/lạ.
+    sb.storage.from(CFG.bucket).upload(path, f.slice(0, f.size, AUD_EXT_TYPE[ext]), { contentType: AUD_EXT_TYPE[ext], upsert: false, cacheControl: '31536000' })
+      .then(function(res){
+        if (res.error) throw res.error;
+        uploaded = true; $('audBusy').textContent = 'Đang lưu thông tin…';
+        return sb.from('memorial_media').insert({ grave_id: graveId, type: 'audio', storage_path: path, title: t, description: d || null,
+          sort_order: maxOrder + 1, rights_confirmed_at: new Date().toISOString() }).select('id').single();
+      }).then(function(res){
+        if (res.error) throw res.error;
+        $('audFile').value = ''; $('audTitle').value = ''; $('audDesc').value = ''; $('audConsent').checked = false;
+        // Kiểm lại trên máy chủ trước khi báo thành công
+        return loadMedia().then(function(){
+          var ok = mediaOf('audio').some(function(x){ return x.storage_path === path; });
+          setMsg($('audMsg'), ok ? 'Đã tải lên và lưu bản ghi âm.' : 'Đã gửi lên nhưng chưa thấy bản ghi trong danh sách — hãy tải lại trang để kiểm tra.', ok ? 'ok' : 'err');
+        });
+      }).catch(function(err){
+        var msg = (uploaded ? 'Chưa lưu được thông tin bản ghi: ' : 'Chưa tải được tệp: ') + audioErr(err);
+        if (!uploaded) { setMsg($('audMsg'), msg, 'err'); return; }
+        // Đã có tệp nhưng chưa có dòng → gỡ tệp để không để lại tệp mồ côi
+        return sb.storage.from(CFG.bucket).remove([path]).then(function(r){
+          setMsg($('audMsg'), msg + (r && r.error ? ' Tệp vừa tải chưa gỡ được (khách không nghe được) — báo kỹ thuật để dọn.' : ' Tệp vừa tải đã được gỡ.'), 'err');
+        }, function(){ setMsg($('audMsg'), msg + ' Tệp vừa tải chưa gỡ được (khách không nghe được) — báo kỹ thuật để dọn.', 'err'); });
+      }).then(function(){ audBusy = false; btn.disabled = false; $('audBusy').textContent = ''; });
+  });
 
   $('lightboxClose').addEventListener('click', function(){ show($('lightbox'), false); $('lightboxImg').src = ''; });
   $('lightbox').addEventListener('click', function(e){ if (e.target === this) { show(this, false); $('lightboxImg').src = ''; } });
