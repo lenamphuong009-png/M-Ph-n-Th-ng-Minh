@@ -753,8 +753,9 @@
   // Khách chỉ đọc được lời nhắn ĐÃ DUYỆT của trang ĐÃ XUẤT BẢN (RLS). Khách không có quyền đọc cột
   // status nên KHÔNG được lọc theo status khi là khách; chỉ ở chế độ xem trước (người quản lý, thấy cả
   // lời nhắn chờ duyệt) mới thêm điều kiện status = approved để giống hệt những gì khách thấy.
-  // Mục này còn ẨN với khách cho tới khi kiểm thử đầu cuối đạt: chỉ hiện khi ?preview=1 hoặc ?kiem-thu=1.
-  var GB_VISIBLE = IS_PREVIEW || new URLSearchParams(window.location.search).get('kiem-thu') === '1';
+  // Mục này HIỆN với khách trên trang đã xuất bản (và ở chế độ xem trước). Lời nhắn mới luôn ở trạng thái CHỜ DUYỆT
+  // (post_guestbook_entry); khách chỉ đọc được lời nhắn ĐÃ DUYỆT (RLS gb_select_approved). Duyệt ở admin.html.
+  var GB_VISIBLE = true;
   var GB_MAX = 1000;
   var gbHonorific = '';
   var gbPending = false;
