@@ -84,6 +84,10 @@
   .upload-row input[type=file]{font-size:13px;font-family:inherit;max-width:100%;}
   .busy{font-size:13px;color:var(--brass);}
   .consent{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;margin-top:0.8rem;cursor:pointer;}
+  .guide{border:1px solid var(--line);border-radius:3px;background:var(--paper);padding:0.6rem 0.8rem;margin-top:0.8rem;}
+  .guide summary{cursor:pointer;font-size:13.5px;font-weight:500;}
+  .guide .checklist{margin:0.6rem 0 0.6rem 1.2rem;padding:0;font-size:13.5px;line-height:1.55;}
+  .guide .tpl{white-space:pre-wrap;font-family:inherit;font-size:13px;background:var(--paper-deep);border:1px solid var(--line);border-radius:2px;padding:0.6rem 0.7rem;margin:0.5rem 0 0;}
   .consent input{margin-top:3px;}
   .a-list{display:flex;flex-direction:column;gap:10px;margin-top:0.8rem;}
   .a-item{border:1px solid var(--line);border-radius:3px;background:var(--paper);padding:0.6rem;display:flex;flex-direction:column;gap:6px;}
@@ -326,16 +330,44 @@
 
     <div class="card" id="audioCard">
       <h2>Ghi âm kỷ niệm</h2>
-      <div class="muted">MP3, WAV, M4A hoặc OGG, tối đa 20MB mỗi tệp. Mỗi bản ghi cần tiêu đề và xác nhận quyền sử dụng. Khách chỉ nghe được khi trang đã xuất bản.</div>
+      <div class="muted">MP3, WAV, M4A hoặc OGG, tối đa 20MB mỗi tệp. Mỗi bản ghi cần tiêu đề và xác nhận quyền sử dụng. Trang công khai chỉ hiện <b>tiêu đề</b> và <b>nút nghe</b>; khách chỉ nghe được khi trang đã xuất bản.</div>
+      <details class="guide" id="audGuide">
+        <summary>Hướng dẫn tiếp nhận tệp ghi âm (đọc trước khi tải lên)</summary>
+        <ol class="checklist">
+          <li>Biết rõ <b>người cung cấp tệp</b>: họ tên, quan hệ với người được tưởng niệm, cách liên lạc.</li>
+          <li>Người cung cấp là <b>người đã thu âm</b> hoặc có quyền với tệp. Bài hát, nhạc nền, đoạn trích chương trình của người khác: <b>không tải</b> khi chưa có phép của chủ sở hữu.</li>
+          <li>Nếu trong tệp có <b>giọng nói của người còn sống khác</b>: cần sự đồng ý của chính người đó.</li>
+          <li><b>Gia đình / người đại diện</b> đồng ý công khai bản ghi trên trang tưởng niệm.</li>
+          <li><b>Lưu lại xác nhận</b> (tin nhắn, email hoặc mẫu bên dưới đã ký) cùng hồ sơ khách.</li>
+          <li><b>Nghe hết tệp</b> trước khi tải; đặt <b>tiêu đề</b> phù hợp để hiện cho khách. Mô tả chỉ để ghi chú nội bộ.</li>
+        </ol>
+        <div class="muted">Mẫu xác nhận gửi người cung cấp tệp (mẫu tham khảo, không phải tư vấn pháp lý — nên nhờ luật sư rà trước khi dùng chính thức):</div>
+        <pre class="tpl" id="audConsentTpl">XÁC NHẬN QUYỀN SỬ DỤNG BẢN GHI ÂM
+Tôi là: ............................................ (họ tên)
+Quan hệ với người được tưởng niệm: ...........................
+Điện thoại / email: ...........................................
+Tệp ghi âm: ........................................ (tên tệp, nội dung chính)
+
+Tôi xác nhận:
+1. Tôi là người thu âm hoặc có quyền sử dụng và chia sẻ bản ghi âm trên.
+2. Bản ghi không chứa nội dung của người khác mà tôi chưa được phép sử dụng.
+3. Người còn sống có giọng nói trong bản ghi (nếu có) đã đồng ý cho chia sẻ.
+4. Tôi đồng ý để Phyverse lưu trữ và hiển thị bản ghi trên trang tưởng niệm
+   của ........................................ để người thân, khách viếng nghe.
+5. Tôi có thể yêu cầu gỡ bản ghi bất cứ lúc nào bằng cách liên hệ Phyverse.
+
+Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
+        <div class="upload-row"><button type="button" class="btn small" id="audTplCopyBtn">Sao chép mẫu xác nhận</button></div>
+      </details>
       <label class="f" for="audFile">Tệp âm thanh</label>
       <div class="upload-row" style="margin-top:0">
         <input type="file" id="audFile" accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a,audio/m4a,audio/ogg,.mp3,.wav,.m4a,.ogg">
       </div>
-      <label class="f" for="audTitle">Tiêu đề <span class="hint">(bắt buộc, tối đa 150 ký tự)</span></label>
+      <label class="f" for="audTitle">Tiêu đề <span class="hint">(bắt buộc, tối đa 150 ký tự — hiện trên trang công khai)</span></label>
       <input type="text" id="audTitle" maxlength="150" placeholder="VD: Lời dặn dò">
-      <label class="f" for="audDesc">Mô tả <span class="hint">(không bắt buộc, tối đa 500 ký tự)</span></label>
+      <label class="f" for="audDesc">Ghi chú nội bộ <span class="hint">(không bắt buộc, tối đa 500 ký tự — KHÔNG hiện cho khách; VD: người cung cấp, ngày nhận xác nhận)</span></label>
       <textarea id="audDesc" maxlength="500"></textarea>
-      <label class="consent"><input type="checkbox" id="audConsent"> Tôi xác nhận có quyền sử dụng và chia sẻ bản ghi âm này trên trang tưởng niệm.</label>
+      <label class="consent"><input type="checkbox" id="audConsent"> Tôi xác nhận đã có xác nhận quyền sử dụng của người cung cấp tệp và sự đồng ý của gia đình để chia sẻ bản ghi âm này trên trang tưởng niệm.</label>
       <div class="upload-row">
         <button type="button" class="btn small" id="audUploadBtn">Tải ghi âm lên</button>
         <span class="busy" id="audBusy"></span>
@@ -1088,7 +1120,7 @@
   function checkAudioText(title, desc){
     if (!title) return 'Vui lòng đặt tiêu đề cho bản ghi âm.';
     if (Array.from(title).length > AUD_TITLE_MAX) return 'Tiêu đề tối đa 150 ký tự.';
-    if (Array.from(desc).length > AUD_DESC_MAX) return 'Mô tả tối đa 500 ký tự.';
+    if (Array.from(desc).length > AUD_DESC_MAX) return 'Ghi chú tối đa 500 ký tự.';
     return null;
   }
   function audioErr(err){
@@ -1103,7 +1135,7 @@
     items.forEach(function(m, idx){
       var card = document.createElement('div'); card.className = 'a-item';
       var title = document.createElement('input'); title.type = 'text'; title.maxLength = AUD_TITLE_MAX; title.value = m.title || ''; title.setAttribute('aria-label', 'Tiêu đề bản ghi âm');
-      var desc = document.createElement('textarea'); desc.maxLength = AUD_DESC_MAX; desc.value = m.description || ''; desc.placeholder = 'Mô tả (không bắt buộc)'; desc.setAttribute('aria-label', 'Mô tả bản ghi âm');
+      var desc = document.createElement('textarea'); desc.maxLength = AUD_DESC_MAX; desc.value = m.description || ''; desc.placeholder = 'Ghi chú nội bộ (không hiện cho khách)'; desc.setAttribute('aria-label', 'Ghi chú nội bộ của bản ghi âm');
       var audio = document.createElement('audio'); audio.controls = true; audio.preload = 'none';
       var tools = document.createElement('div'); tools.className = 'tools';
       var bSave = document.createElement('button'); bSave.type = 'button'; bSave.textContent = 'Lưu thông tin';
@@ -1130,7 +1162,7 @@
       if (res.error) throw res.error;
       if (!res.data) throw { code: '42501', message: 'Không có quyền.' };
       m.title = res.data.title; m.description = res.data.description;
-      setMsg($('audMsg'), 'Đã lưu tiêu đề và mô tả.', 'ok');
+      setMsg($('audMsg'), 'Đã lưu tiêu đề và ghi chú.', 'ok');
     }).catch(function(err){ setMsg($('audMsg'), audioErr(err), 'err'); }).then(function(){ btn.disabled = false; });
   }
   // Xóa: xóa DÒNG trước (máy chủ kiểm quyền) → khách mất quyền nghe ngay; rồi xóa TỆP.
@@ -1150,6 +1182,12 @@
     }, function(err){ setMsg($('audMsg'), audioErr(err), 'err'); })
       .then(function(){ audBusy = false; return loadMedia(); });
   }
+  $('audTplCopyBtn').addEventListener('click', function(){
+    var t = $('audConsentTpl').textContent;
+    (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function(){
+      setMsg($('audMsg'), 'Đã sao chép mẫu xác nhận.', 'ok');
+    }).catch(function(){ prompt('Sao chép mẫu xác nhận:', t); });
+  });
   $('audUploadBtn').addEventListener('click', function(){
     if (audBusy || !state.cur) return;
     var f = $('audFile').files[0], t = $('audTitle').value.trim(), d = $('audDesc').value.trim();
