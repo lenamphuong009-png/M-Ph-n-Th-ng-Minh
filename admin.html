@@ -240,6 +240,10 @@
     <div class="card" id="qrCard">
       <h2>Mã QR</h2>
       <div class="msg" id="qrState" role="status"></div>
+      <div id="qrVerify" hidden>
+        <div class="muted">Trước khi phát QR bàn giao: mở <code id="qrVerifyUrl"></code> trên điện thoại, <b>không đăng nhập</b>, kiểm tra đúng hồ sơ, rồi bấm xác nhận.</div>
+        <div class="upload-row"><button type="button" class="btn small" id="qrVerifyBtn">Tôi đã kiểm tra — địa chỉ mở đúng hồ sơ</button></div>
+      </div>
       <div id="qrBody" hidden>
         <div class="qr-wrap">
           <img id="qrImg" alt="Mã QR dẫn tới trang tưởng niệm">
@@ -445,8 +449,9 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
   // Địa chỉ công khai https://<slug>.phyverse.io.vn/ — PHẢI trùng PUBLIC_SLUG / RESERVED_LABELS / DNS_LABEL_MAX của
   // index.html bản công khai (có kiểm thử tự động so sánh). Dùng chung cho QR, Tải PNG, Sao chép, "Đường dẫn công khai".
   var PUBLIC_ROOT = 'phyverse.io.vn', DNS_LABEL_MAX = 63;
-  var RESERVED_LABELS = ['tuongniem', 'quanly', 'staging-tn', 'www', 'mail', 'email', 'smtp', 'imap', 'pop', 'ftp',
-    'api', 'admin', 'app', 'cdn', 'static', 'assets', 'dev', 'test', 'staging', 'giapha', 'gia-pha', 'quy'];
+  var RESERVED_LABELS = ['tuongniem', 'quanly', 'staging-tn', 'staging', 'www', 'mail', 'email', 'smtp', 'imap', 'pop', 'ftp',
+    'api', 'admin', 'app', 'cdn', 'static', 'assets', 'dev', 'test', 'giapha', 'gia-pha', 'quy', 'phyverse', 'status', 'help', 'support'];
+  // ↑ PHẢI trùng public.tn_slug_reserved() (M1) và danh sách còn lại (index.html / admin.html) — có kiểm thử so sánh.
   function publicUrl(slug){
     if (typeof slug !== 'string' || slug.length < 3 || slug.length > DNS_LABEL_MAX || !SLUG_RE.test(slug) || RESERVED_LABELS.indexOf(slug) !== -1) return null;
     return 'https://' + slug + '.' + PUBLIC_ROOT + '/';
@@ -679,6 +684,7 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
     e.preventDefault();
     var name = $('newName').value.trim(), slug = $('newSlug').value.trim();
     if (!name) { setMsg($('createMsg'), 'Vui lòng nhập họ tên.', 'err'); return; }
+    if (SLUG_RE.test(slug) && slug.length >= 3 && !publicUrl(slug)) { setMsg($('createMsg'), 'Đường dẫn này không dùng được làm địa chỉ công khai (tối đa 63 ký tự, không dùng tên dành riêng).', 'err'); return; }
     if (slug.length < 3 || !SLUG_RE.test(slug)) { setMsg($('createMsg'), 'Đường dẫn chỉ gồm chữ thường không dấu, số và dấu gạch ngang (3–100 ký tự), không bắt đầu/kết thúc bằng gạch ngang.', 'err'); return; }
     var btn = $('createBtn'); btn.disabled = true; setMsg($('createMsg'), 'Đang tạo…');
     sb.rpc('create_memorial', { p_slug: slug, p_name: name }).then(function(res){
@@ -736,13 +742,13 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
 
   // ===== MÃ QR =====
   // URL trong QR = địa chỉ công khai của đúng hồ sơ: publicUrl(slug) = https://<slug>.phyverse.io.vn/ (không bao giờ là
-  // trang quản lý). Chỉ tạo QR khi đang mở trang quản lý ở tên miền có trong bảng dưới. CHƯA có chế độ bàn giao:
-  // mọi QR là THỬ NGHIỆM — chỉ mở được khi <slug>.phyverse.io.vn đã có DNS + alias (hệ thống không tự kiểm được).
-  var QR_ENVS = {
-    'quanly.phyverse.io.vn': { mode: 'test' },
-    'engine-v1--glittery-swan-23c695.netlify.app': { mode: 'test' }
-  };
-  var QR_ENV = Object.prototype.hasOwnProperty.call(QR_ENVS, window.location.hostname) ? QR_ENVS[window.location.hostname] : null;
+  // trang quản lý). Chế độ theo MÔI TRƯỜNG của trang quản lý (TN_ENV_NAME, chọn theo tên miền):
+  //   staging    → 'test'     : LUÔN viền đỏ + "QR THỬ NGHIỆM — KHÔNG BÀN GIAO" + cảnh báo DNS/alias.
+  //   production → 'handover' : chỉ phát QR (không viền đỏ) khi địa chỉ công khai ĐÃ ĐƯỢC XÁC NHẬN mở đúng hồ sơ
+  //                             (cột public_url_verified_at, RPC tn_set_public_url_verified — migration M2).
+  // Môi trường khác / chưa cấu hình → không có QR.
+  var QR_MODE_BY_ENV = { staging: 'test', production: 'handover' };
+  var QR_ENV = TN_ENV && Object.prototype.hasOwnProperty.call(QR_MODE_BY_ENV, TN_ENV_NAME) ? { mode: QR_MODE_BY_ENV[TN_ENV_NAME] } : null;
   var QR_TEST_LABEL = 'QR THỬ NGHIỆM — KHÔNG BÀN GIAO';
   var qrCur = null; // { url, slug, test, canvas } — chỉ có khi trang đã xuất bản (theo dữ liệu máy chủ)
 
@@ -788,6 +794,7 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
     $('qrImg').removeAttribute('src');
     $('qrUrl').textContent = '';
     show($('qrTestBadge'), false);
+    show($('qrVerify'), false);
     if (!g || g.is_published !== true) {
       setMsg($('qrState'), 'Trang chưa xuất bản — chưa có mã QR bàn giao. Mã QR chỉ xuất hiện sau khi trang được xuất bản thành công.');
       return;
@@ -806,7 +813,34 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
       setMsg($('qrState'), 'Không tải được thư viện tạo mã QR. Các chức năng quản lý khác không bị ảnh hưởng — hãy tải lại trang.', 'err');
       return;
     }
-    var isTest = true; // chưa có chế độ bàn giao
+    var isTest = QR_ENV.mode !== 'handover';
+    if (!isTest) {
+      // BÀN GIAO: chỉ khi đã xác nhận địa chỉ công khai mở đúng hồ sơ (đọc riêng — staging không có cột này).
+      setMsg($('qrState'), 'Đang kiểm tra xác nhận địa chỉ công khai…');
+      sb.from('graves').select('public_url_verified_at').eq('id', g.id).maybeSingle().then(function(res){
+        if (state.cur !== g) return;
+        if (res.error || !res.data) { setMsg($('qrState'), 'Chưa kiểm tra được trạng thái xác nhận địa chỉ — không tạo QR bàn giao.', 'err'); return; }
+        if (!res.data.public_url_verified_at) {
+          $('qrVerifyUrl').textContent = url; show($('qrVerify'), true);
+          setMsg($('qrState'), 'Chưa có mã QR bàn giao: cần xác nhận địa chỉ công khai ' + url + ' trước.', 'err');
+          return;
+        }
+        drawQrCard(url, slug, false);
+      }, function(){ if (state.cur === g) setMsg($('qrState'), 'Chưa kiểm tra được trạng thái xác nhận địa chỉ — không tạo QR bàn giao.', 'err'); });
+      return;
+    }
+    drawQrCard(url, slug, true);
+  }
+  $('qrVerifyBtn').addEventListener('click', function(){
+    var g = state.cur, btn = this; if (!g || !publicUrl(g.memorial_slug)) return;
+    if (!confirm('Xác nhận bạn đã mở ' + publicUrl(g.memorial_slug) + ' trên điện thoại (không đăng nhập) và thấy ĐÚNG hồ sơ này?')) return;
+    btn.disabled = true;
+    sb.rpc('tn_set_public_url_verified', { p_grave_id: g.id, p_verified: true }).then(function(res){
+      if (res.error) throw res.error;
+      show($('qrVerify'), false); renderQr();
+    }).catch(function(err){ setMsg($('qrState'), friendly(err), 'err'); }).then(function(){ btn.disabled = false; });
+  });
+  function drawQrCard(url, slug, isTest){
     var canvas;
     try { canvas = drawQr(url, isTest); }
     catch (e) { setMsg($('qrState'), 'Không tạo được mã QR cho trang này.', 'err'); return; }
@@ -815,8 +849,9 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
     $('qrUrl').textContent = url;
     show($('qrTestBadge'), isTest);
     show($('qrBody'), true);
-    setMsg($('qrState'), 'Mã QR THỬ NGHIỆM — chỉ mở được khi tên miền ' + url + ' đã được tạo DNS và thêm alias. ' +
+    if (isTest) setMsg($('qrState'), 'Mã QR THỬ NGHIỆM — chỉ mở được khi tên miền ' + url + ' đã được tạo DNS và thêm alias. ' +
       'Hãy quét thử bằng điện thoại chưa đăng nhập trước khi dùng. KHÔNG bàn giao cho khách.', 'err');
+    else setMsg($('qrState'), 'Mã QR bàn giao — địa chỉ công khai đã được xác nhận mở đúng hồ sơ.', 'ok');
   }
 
   $('qrDownloadBtn').addEventListener('click', function(){

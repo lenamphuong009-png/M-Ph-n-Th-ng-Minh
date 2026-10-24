@@ -431,8 +431,9 @@
   };
   var QUERY_HOSTS = Object.keys(QUERY_HOST_ENV);
   // Nhãn KHÔNG BAO GIỜ là hồ sơ. 'tuongniem' = trang ông Vũ Đức Hòa (site riêng, không chạy mã này).
-  var RESERVED_LABELS = ['tuongniem', 'quanly', 'staging-tn', 'www', 'mail', 'email', 'smtp', 'imap', 'pop', 'ftp',
-    'api', 'admin', 'app', 'cdn', 'static', 'assets', 'dev', 'test', 'staging', 'giapha', 'gia-pha', 'quy'];
+  var RESERVED_LABELS = ['tuongniem', 'quanly', 'staging-tn', 'staging', 'www', 'mail', 'email', 'smtp', 'imap', 'pop', 'ftp',
+    'api', 'admin', 'app', 'cdn', 'static', 'assets', 'dev', 'test', 'giapha', 'gia-pha', 'quy', 'phyverse', 'status', 'help', 'support'];
+  // ↑ PHẢI trùng public.tn_slug_reserved() (M1) và danh sách còn lại (index.html / admin.html) — có kiểm thử so sánh.
   var DNS_LABEL_MAX = 63; // giới hạn độ dài 1 nhãn tên miền (DNS)
   function isReserved(slug){ return RESERVED_LABELS.indexOf(slug) !== -1; }
   var HOST = String(window.location.hostname || '').toLowerCase().replace(/\.$/, '');
