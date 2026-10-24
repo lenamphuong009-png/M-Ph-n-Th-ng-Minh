@@ -390,14 +390,21 @@
   // ===== MEMORIAL ENGINE V1 =====
   // Luồng: ?memorial=<slug> → kiểm tra định dạng → Supabase (graves) → validate → render.
   // Chỉ đọc. Không upload, không đăng nhập, không gọi RPC ở bước này.
-  // Đổi môi trường (staging ↔ production) = đổi đúng 2 hằng số dưới đây.
-  var SUPABASE_URL = 'https://mhyadympadwxzuwwlnps.supabase.co';            // STAGING
-  var SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_JmjzqnFPKcC2bQ2T4Kr9vQ_QoFzdXN1'; // STAGING — key công khai, bảo vệ bằng RLS
+  // ===== CẤU HÌNH MÔI TRƯỜNG =====
+  // Mỗi môi trường = 1 project Supabase: URL + publishable key (công khai, quyền thật do RLS quyết định).
+  // KHÔNG BAO GIỜ đặt service_role / secret key ở đây. Môi trường chưa có cấu hình (null) → trang báo lỗi,
+  // KHÔNG tự rơi về môi trường khác.
+  var TN_ENVS = {
+    staging:    { url: 'https://mhyadympadwxzuwwlnps.supabase.co', key: 'sb_publishable_JmjzqnFPKcC2bQ2T4Kr9vQ_QoFzdXN1' },
+    production: null  // chưa có project production
+  };
+  // Tên miền khách <slug>.phyverse.io.vn thuộc ĐÚNG 1 môi trường: môi trường của site công khai đang chạy tệp này.
+  // Gói phát hành production đổi dòng này thành 'production' (xem hướng dẫn phát hành).
+  var TN_PUBLIC_ENV = 'staging';
 
   var MEDIA_BUCKET = 'memorial-media';
   // Khóa phiên dùng chung với admin.html — CHỈ dùng ở chế độ xem trước (?preview=1).
   var ADMIN_STORAGE_KEY = 'phy-tuongniem-quanly';
-  var IS_PREVIEW = new URLSearchParams(window.location.search).get('preview') === '1';
 
   // Danh sách cột cố định — KHÔNG dùng select('*') (anon chỉ được cấp quyền theo cột).
   var GRAVE_COLUMNS = [
@@ -409,14 +416,48 @@
 
   var SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/; // cùng ràng buộc graves_slug_format
 
+  // ===== PHÂN LOẠI TÊN MIỀN — DANH SÁCH CHO PHÉP, mặc định TỪ CHỐI =====
+  // 'query'  : tên miền quản lý / thử nghiệm (khớp CHÍNH XÁC) → dùng ?memorial=<slug>, có xem trước, có ?kiem-thu=1.
+  // 'public' : https://<slug>.phyverse.io.vn/ (đúng 1 nhãn, hợp lệ, không bị cấm) → slug lấy từ tên miền;
+  //            BỎ QUA ?memorial=, ?preview=1, ?kiem-thu=1.
+  // 'denied' : mọi tên miền khác (lạ, nhiều cấp, tên miền gốc, nhãn bị cấm) → không mở hồ sơ, không truy vấn máy chủ.
+  var PUBLIC_ROOT = 'phyverse.io.vn';
+  var QUERY_HOST_ENV = {                            // tên miền quản lý / thử nghiệm → môi trường
+    'quanly.phyverse.io.vn': 'staging',                       // trang quản lý staging
+    'staging-tn.phyverse.io.vn': 'staging',                   // tên miền staging dự kiến (chưa tạo DNS)
+    'phyverse-staging-tn.netlify.app': 'staging',             // site staging
+    'engine-v1--glittery-swan-23c695.netlify.app': 'staging', // deploy nhánh (gỡ dòng này khi tắt deploy nhánh)
+    '127.0.0.1': 'staging', 'localhost': 'staging'            // máy thử cục bộ
+  };
+  var QUERY_HOSTS = Object.keys(QUERY_HOST_ENV);
+  // Nhãn KHÔNG BAO GIỜ là hồ sơ. 'tuongniem' = trang ông Vũ Đức Hòa (site riêng, không chạy mã này).
+  var RESERVED_LABELS = ['tuongniem', 'quanly', 'staging-tn', 'www', 'mail', 'email', 'smtp', 'imap', 'pop', 'ftp',
+    'api', 'admin', 'app', 'cdn', 'static', 'assets', 'dev', 'test', 'staging', 'giapha', 'gia-pha', 'quy'];
+  var DNS_LABEL_MAX = 63; // giới hạn độ dài 1 nhãn tên miền (DNS)
+  function isReserved(slug){ return RESERVED_LABELS.indexOf(slug) !== -1; }
+  var HOST = String(window.location.hostname || '').toLowerCase().replace(/\.$/, '');
+  var PUBLIC_SLUG = (function(){
+    var suffix = '.' + PUBLIC_ROOT;
+    if (HOST.length <= suffix.length || HOST.slice(-suffix.length) !== suffix) return null;
+    var label = HOST.slice(0, -suffix.length);
+    if (label.length < 3 || label.length > DNS_LABEL_MAX || !SLUG_RE.test(label) || isReserved(label)) return null;
+    return label; // SLUG_RE không cho dấu chấm → chỉ đúng 1 nhãn
+  })();
+  var HOST_KIND = QUERY_HOSTS.indexOf(HOST) !== -1 ? 'query' : (PUBLIC_SLUG !== null ? 'public' : 'denied');
+  var IS_QUERY_HOST = HOST_KIND === 'query';
+  // Xem trước chỉ có ở tên miền quản lý / thử nghiệm.
+  var IS_PREVIEW = IS_QUERY_HOST && new URLSearchParams(window.location.search).get('preview') === '1';
+
   function $(id){ return document.getElementById(id); }
   function show(el, on){ el.hidden = !on; }
   function isText(v){ return typeof v === 'string' && v.trim() !== ''; }
 
   function getSlug(){
+    if (HOST_KIND === 'public') return PUBLIC_SLUG;   // ?memorial= bị bỏ qua
+    if (HOST_KIND !== 'query') return null;           // tên miền không được phép → không mở hồ sơ
     var slug = new URLSearchParams(window.location.search).get('memorial');
     if (typeof slug !== 'string') return null;
-    if (slug.length < 3 || slug.length > 100 || !SLUG_RE.test(slug)) return null;
+    if (slug.length < 3 || slug.length > 100 || !SLUG_RE.test(slug) || isReserved(slug)) return null;
     return slug;
   }
 
@@ -430,7 +471,12 @@
     }
     // Khách viếng: không lưu phiên. Xem trước: đọc phiên đăng nhập của trang quản lý
     // (cùng tên miền) để RLS cho phép người quản lý đọc bản nháp của trang mình.
-    sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    var envName = IS_QUERY_HOST ? QUERY_HOST_ENV[HOST] : TN_PUBLIC_ENV;
+    var cfg = Object.prototype.hasOwnProperty.call(TN_ENVS, envName) ? TN_ENVS[envName] : null;
+    if (!cfg || !/^https:\/\/[a-z0-9]+\.supabase\.co$/.test(cfg.url) || !/^sb_publishable_/.test(cfg.key)) {
+      throw new Error('Môi trường "' + envName + '" chưa được cấu hình');
+    }
+    sbClient = window.supabase.createClient(cfg.url, cfg.key, {
       auth: IS_PREVIEW
         ? { storageKey: ADMIN_STORAGE_KEY, persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
         : { persistSession: false, autoRefreshToken: false }
