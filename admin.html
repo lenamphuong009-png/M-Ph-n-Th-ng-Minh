@@ -59,6 +59,18 @@
   .sticky{position:sticky;bottom:0;background:rgba(244,238,226,0.97);border-top:1px solid var(--line);padding:0.75rem 1rem;margin:2rem -1rem 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;z-index:5;}
   .sticky .status{flex:1 1 180px;font-size:13px;color:var(--sage);}
   .sticky .status.dirty{color:var(--danger);}
+  /* Thông báo kết quả Lưu/Xuất bản/lỗi nằm TRONG thanh cố định ở đáy → luôn trong khung nhìn. Rỗng thì ẩn. */
+  /* Ô thông báo giữ nguyên tới khi có kết quả mới hoặc người dùng bấm "Đóng" (không tự ẩn). */
+  .msgbar{flex:1 1 100%;order:-2;display:flex;align-items:flex-start;gap:8px;padding:0.4rem 0.4rem 0.4rem 0.65rem;border-radius:2px;border:1px solid var(--line);background:#FBF8F2;}
+  .msgbar.err{border-color:var(--danger);background:#F6E9E4;}
+  .msgbar.ok{border-color:var(--ok);background:#EBF0E8;}
+  .msgbar #editMsg{flex:1 1 auto;min-width:0;margin:0;min-height:0;font-size:14px;font-weight:500;line-height:1.45;padding-top:0.15rem;}
+  .msgbar-close{flex:none;border:1px solid var(--line);background:#fff;border-radius:2px;padding:0.25rem 0.6rem;font-family:inherit;font-size:13px;color:var(--ink);cursor:pointer;}
+  .sticky .live-note{flex:1 1 100%;order:-1;font-size:13px;color:var(--ink-soft);}
+  .env.unknown{background:var(--danger);color:#fff;}
+  .link-note{font-size:13px;color:var(--ink-soft);margin-top:0.35rem;}
+  .m-item.unsaved,.a-item.unsaved{border-color:var(--danger);}
+  .unsaved-note{font-size:12.5px;color:var(--danger);}
   .rep{border:1px solid var(--line);border-radius:3px;padding:0.75rem;margin-top:0.6rem;background:var(--paper);}
   .rep-top{display:flex;gap:8px;align-items:center;}
   .rep-top input{flex:1;}
@@ -134,6 +146,10 @@
     .sticky{margin-left:-0.85rem;margin-right:-0.85rem;padding:0.5rem 0.85rem;gap:6px;}
     /* Điện thoại: dòng trạng thái gọn ở trên, 3 nút trên một hàng — thanh thấp hơn, che ít nội dung hơn */
     .sticky .status{flex:1 1 100%;font-size:12px;line-height:1.35;}
+    .sticky .live-note{font-size:12px;line-height:1.35;}
+    .msgbar{padding:0.3rem 0.3rem 0.3rem 0.5rem;}
+    .msgbar #editMsg{font-size:13px;line-height:1.4;}
+    .msgbar-close{padding:0.2rem 0.5rem;font-size:12.5px;}
     .sticky .btn{flex:1 1 0;min-width:0;padding:0.5rem 0.35rem;font-size:13px;}
     html{scroll-padding-bottom:112px;}
     .qr-wrap img{width:100%;max-width:260px;margin:0 auto;}
@@ -145,7 +161,7 @@
 
 <div class="topbar">
   <div class="brand">Tưởng niệm số<small>Quản lý</small></div>
-  <span class="env" id="envBadge">Staging</span>
+  <span class="env unknown" id="envBadge">Chưa xác định môi trường</span>
   <div class="spacer"></div>
   <div class="who" id="whoText" hidden></div>
   <button type="button" id="logoutBtn" hidden>Đăng xuất</button>
@@ -236,6 +252,7 @@
         <h1 id="edTitle"></h1>
         <div class="muted">Trạng thái: <span class="badge" id="edBadge"></span></div>
         <div class="link-box"><span class="muted">Đường dẫn công khai:</span><code id="edLink"></code><button type="button" class="btn small" id="copyLinkBtn">Sao chép</button></div>
+        <div class="link-note" id="edLinkNote" hidden></div>
       </div>
     </div>
 
@@ -400,12 +417,16 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
     </div>
 
     <div class="sticky">
+      <div class="msgbar" id="editMsgBar" hidden>
+        <div class="msg" id="editMsg" role="alert"></div>
+        <button type="button" class="msgbar-close" id="editMsgClose" aria-label="Đóng thông báo">Đóng ✕</button>
+      </div>
+      <div class="live-note" id="liveNote" hidden>Trang đang công khai — sau khi lưu, khách sẽ thấy nội dung mới.</div>
       <div class="status" id="saveStatus">Chưa có thay đổi.</div>
       <button type="button" class="btn primary" id="saveBtn">Lưu nháp</button>
       <button type="button" class="btn" id="previewBtn">Xem trước</button>
       <button type="button" class="btn brass" id="publishBtn">Xuất bản</button>
     </div>
-    <div class="msg" id="editMsg" role="alert"></div>
   </section>
 </main>
 
@@ -439,6 +460,18 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
   var TN_ENV_NAME = Object.prototype.hasOwnProperty.call(ADMIN_HOST_ENV, window.location.hostname) ? ADMIN_HOST_ENV[window.location.hostname] : null;
   var TN_ENV = TN_ENV_NAME && Object.prototype.hasOwnProperty.call(TN_ENVS, TN_ENV_NAME) ? TN_ENVS[TN_ENV_NAME] : null;
   if (TN_ENV && (!/^https:\/\/[a-z0-9]+\.supabase\.co$/.test(TN_ENV.url) || !/^sb_publishable_/.test(TN_ENV.key))) TN_ENV = null;
+  // Nhãn môi trường ở thanh trên: CHỈ hiện tên khi tên miền khớp bảng ADMIN_HOST_ENV VÀ môi trường đó có cấu hình hợp lệ.
+  // Không xác định được → giữ nhãn "Chưa xác định môi trường" (màu cảnh báo), không tự suy đoán.
+  (function(){
+    var ENV_LABEL = { staging: 'Staging', production: 'Production' };
+    var el = document.getElementById('envBadge');
+    if (!el) return;
+    if (TN_ENV && Object.prototype.hasOwnProperty.call(ENV_LABEL, TN_ENV_NAME)) {
+      el.textContent = ENV_LABEL[TN_ENV_NAME]; el.className = 'env';
+    } else {
+      el.textContent = 'Chưa xác định môi trường'; el.className = 'env unknown';
+    }
+  })();
   var CFG = {
     url: TN_ENV ? TN_ENV.url : null,
     key: TN_ENV ? TN_ENV.key : null,
@@ -465,7 +498,15 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
 
   function $(id){ return document.getElementById(id); }
   function show(el, on){ el.hidden = !on; }
-  function setMsg(el, text, kind){ el.textContent = text || ''; el.className = 'msg' + (kind ? ' ' + kind : ''); }
+  function setMsg(el, text, kind){
+    el.textContent = text || ''; el.className = 'msg' + (kind ? ' ' + kind : '');
+    // Ô thông báo ở thanh đáy (editMsg): hiện khi có nội dung, màu theo loại; KHÔNG tự ẩn — chỉ thay khi có kết quả
+    // mới hoặc khi người dùng bấm "Đóng".
+    if (el.id === 'editMsg') {
+      var bar = document.getElementById('editMsgBar');
+      if (bar) { bar.hidden = !text; bar.className = 'msgbar' + (kind ? ' ' + kind : ''); }
+    }
+  }
   function trimOrNull(v){ v = (v || '').trim(); return v === '' ? null : v; }
   function uuid(){
     if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -577,7 +618,11 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
   }
 
   var state = { user: null, canCreate: false, graves: [], cur: null, curCanVerify: false, media: [], dirty: false,
-                pendingByGrave: {}, gb: [], gbFilter: 'pending' };
+                pendingByGrave: {}, gb: [], gbFilter: 'pending',
+                mediaDrafts: {} };  // id ảnh/video/âm thanh → nội dung đang nhập dở (chú thích / tiêu đề + ghi chú) chưa lưu
+  // Có thay đổi chưa lưu ở BẤT KỲ đâu: các ô chính (nút Lưu chính) hoặc chú thích/thông tin âm thanh (nút lưu riêng từng mục).
+  function hasUnsaved(){ return state.dirty || Object.keys(state.mediaDrafts).length > 0; }
+  function clearUnsaved(){ state.dirty = false; state.mediaDrafts = {}; }
 
   // ===== ĐIỀU HƯỚNG =====
   function go(view){
@@ -608,8 +653,8 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
       .then(function(){ btn.disabled = false; });
   });
   $('logoutBtn').addEventListener('click', function(){
-    if (state.dirty && !confirm('Có thay đổi chưa lưu. Vẫn đăng xuất?')) return;
-    state.dirty = false;
+    if (hasUnsaved() && !confirm('Có thay đổi chưa lưu. Vẫn đăng xuất?')) return;
+    clearUnsaved();
     sb.auth.signOut().then(function(){ state.user = null; setUserBar(); go('viewLogin'); });
   });
 
@@ -706,14 +751,25 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
   var GRAVE_EDIT_COLS = 'id, memorial_slug, deceased_name, saint_name, birth_label, death_label, epigraph, honorific, portrait_path, timeline, wishes, footer_note, is_published';
   var FIELD_MAP = { fName:'deceased_name', fSaint:'saint_name', fHonorific:'honorific', fBirth:'birth_label', fDeath:'death_label', fEpigraph:'epigraph', fFooter:'footer_note' };
 
-  function markDirty(){ state.dirty = true; var s = $('saveStatus'); s.textContent = 'Có thay đổi chưa lưu.'; s.className = 'status dirty'; }
-  function markSaved(text){ state.dirty = false; var s = $('saveStatus'); s.textContent = text; s.className = 'status'; }
+  // Dòng trạng thái ở thanh đáy: các ô chính + chú thích/thông tin âm thanh chưa lưu (lưu bằng nút riêng của từng mục).
+  var savedStatusText = 'Chưa có thay đổi.';
+  function renderSaveStatus(){
+    var s = $('saveStatus'), parts = [];
+    if (state.dirty) parts.push('Có thay đổi chưa lưu.');
+    if (Object.keys(state.mediaDrafts).length) parts.push('Có chú thích hoặc thông tin bản ghi âm chưa lưu — bấm nút lưu ngay tại mục đó.');
+    s.textContent = parts.length ? parts.join(' ') : savedStatusText;
+    s.className = parts.length ? 'status dirty' : 'status';
+  }
+  function markDirty(){ state.dirty = true; renderSaveStatus(); }
+  function markSaved(text){ state.dirty = false; savedStatusText = text; renderSaveStatus(); }
   Object.keys(FIELD_MAP).forEach(function(id){ $(id).addEventListener('input', markDirty); });
-  window.addEventListener('beforeunload', function(e){ if (state.dirty) { e.preventDefault(); e.returnValue = ''; } });
+  window.addEventListener('beforeunload', function(e){ if (hasUnsaved()) { e.preventDefault(); e.returnValue = ''; } });
+  // Người dùng chủ động đóng thông báo. Kết quả lưu vẫn còn ở dòng trạng thái ("Đã lưu lúc …") và nhãn trạng thái trang.
+  $('editMsgClose').addEventListener('click', function(){ setMsg($('editMsg'), ''); });
   $('backLink').addEventListener('click', function(e){
     e.preventDefault();
-    if (state.dirty && !confirm('Có thay đổi chưa lưu. Vẫn quay lại danh sách?')) return;
-    state.dirty = false; openList();
+    if (hasUnsaved() && !confirm('Có thay đổi chưa lưu. Vẫn quay lại danh sách?')) return;
+    clearUnsaved(); openList();
   });
 
   // Vai của CHÍNH tài khoản trên hồ sơ (policy chỉ trả dòng của mình). Chỉ dùng để ẩn/hiện nút xác nhận địa chỉ —
@@ -734,6 +790,7 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
     go('viewEdit');
     setMsg($('editMsg'), 'Đang tải…');
     state.curCanVerify = false;
+    state.mediaDrafts = {};
     Promise.all([sb.from('graves').select(GRAVE_EDIT_COLS).eq('id', id).maybeSingle(), loadCanVerify(id)]).then(function(rs){
       var res = rs[0];
       if (res.error) throw res.error;
@@ -763,6 +820,19 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
     var g = state.cur;
     var b = $('edBadge'); b.className = 'badge ' + (g.is_published ? 'pub' : 'draft'); b.textContent = g.is_published ? 'Đã xuất bản' : 'Nháp';
     $('edLink').textContent = publicUrl(g.memorial_slug) || 'Chưa có địa chỉ công khai hợp lệ';
+    // Lời nhắc mở thử: KHÔNG khẳng định địa chỉ đang hoạt động — chỉ nhắc kiểm tra trước khi gửi khách.
+    var note = $('edLinkNote');
+    if (!publicUrl(g.memorial_slug)) { note.textContent = ''; show(note, false); }
+    else {
+      note.textContent = g.is_published
+        ? 'Trước khi gửi cho khách, hãy mở thử địa chỉ này trên điện thoại. Địa chỉ chỉ mở được khi tên miền đã được cấu hình — hệ thống quản lý chưa kiểm tra điều này.'
+        : 'Trang đang là Nháp — khách chưa mở được địa chỉ này. Sau khi xuất bản, hãy mở thử trên điện thoại trước khi gửi cho khách.';
+      show(note, true);
+    }
+    // Nhãn nút lưu theo trạng thái máy chủ: nháp → "Lưu nháp"; đã xuất bản → "Lưu thay đổi" + nhắc thay đổi hiện cho khách.
+    // Chỉ đổi chữ hiển thị — cơ chế lưu (save()) giữ nguyên.
+    $('saveBtn').textContent = g.is_published ? 'Lưu thay đổi' : 'Lưu nháp';
+    show($('liveNote'), !!g.is_published);
     $('publishBtn').textContent = g.is_published ? 'Ngừng xuất bản' : 'Xuất bản';
     $('publishBtn').className = g.is_published ? 'btn danger' : 'btn brass';
   }
@@ -1082,7 +1152,9 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
       state.cur = res.data; fillForm();
       var t = new Date();
       markSaved('Đã lưu lúc ' + t.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '.');
-      setMsg($('editMsg'), 'Đã lưu vào cơ sở dữ liệu.', 'ok');
+      setMsg($('editMsg'), state.cur.is_published
+        ? 'Đã lưu. Trang đang công khai — khách sẽ thấy nội dung mới khi mở hoặc tải lại trang.'
+        : 'Đã lưu bản nháp. Khách chưa xem được cho tới khi bạn bấm Xuất bản.', 'ok');
       return res.data;
     }).catch(function(err){
       if (err && err.message !== 'validation') setMsg($('editMsg'), friendly(err), 'err');
@@ -1112,7 +1184,7 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
       if (res.error) throw res.error;
       if (!res.data) throw { code: '42501', message: 'Không có quyền.' };
       state.cur = res.data; fillForm(); markSaved('Đã lưu.');
-      setMsg($('editMsg'), willPublish ? 'Đã xuất bản. Khách có thể mở đường dẫn công khai.' : 'Đã ngừng xuất bản. Trang trở về Nháp.', 'ok');
+      setMsg($('editMsg'), willPublish ? 'Đã xuất bản. Hãy mở thử đường dẫn công khai trên điện thoại trước khi gửi cho khách.' : 'Đã ngừng xuất bản. Trang trở về Nháp.', 'ok');
     }).catch(function(err){ if (err && err.message !== 'validation') setMsg($('editMsg'), friendly(err), 'err'); });
   });
 
@@ -1120,7 +1192,7 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
     if (!state.cur || !publicUrl(state.cur.memorial_slug)) { setMsg($('editMsg'), 'Chưa có địa chỉ công khai hợp lệ để sao chép.', 'err'); return; }
     var t = $('edLink').textContent;
     (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function(){
-      setMsg($('editMsg'), 'Đã sao chép đường dẫn.', 'ok');
+      setMsg($('editMsg'), 'Đã sao chép đường dẫn. Hãy mở thử trước khi gửi cho khách.', 'ok');
     }).catch(function(){ prompt('Sao chép đường dẫn:', t); });
   });
 
@@ -1189,7 +1261,27 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
       }).catch(function(err){ setMsg($('imgMsg'), 'Không tải được danh sách ảnh/video: ' + friendly(err), 'err'); });
   }
   function mediaOf(type){ return state.media.filter(function(m){ return m.type === type; }); }
-  function renderMedia(){ renderMediaGrid('image', $('imgGrid')); renderMediaGrid('video', $('vidGrid')); renderAudio(); }
+  function renderMedia(){
+    // Bỏ bản nhập dở của mục không còn tồn tại (đã xóa); bản nhập dở của mục còn lại được giữ khi vẽ lại danh sách.
+    var ids = {}; state.media.forEach(function(m){ ids[m.id] = true; });
+    Object.keys(state.mediaDrafts).forEach(function(id){ if (!ids[id]) delete state.mediaDrafts[id]; });
+    renderMediaGrid('image', $('imgGrid')); renderMediaGrid('video', $('vidGrid')); renderAudio();
+    renderSaveStatus();
+  }
+  // Đánh dấu một mục ảnh/video/âm thanh có nội dung chưa lưu (viền đỏ + dòng nhắc) và cập nhật trạng thái chung.
+  // Bản ghi MỚI NHẤT của mục theo id (danh sách có thể đã được tải lại trong lúc chờ lưu, khi đó đối tượng cũ đã cũ).
+  function latestMedia(m){
+    for (var i = 0; i < state.media.length; i++) if (state.media[i].id === m.id) return state.media[i];
+    return m;
+  }
+  // Sau khi lưu THÀNH CÔNG: ô còn trên trang → so lại; ô đã bị vẽ lại → vẽ lại danh sách để đánh dấu theo dữ liệu mới.
+  function afterItemSaved(card, check){ if (card.isConnected) check(); else renderMedia(); }
+  function trackDraft(id, card, note, changed, draft){
+    if (changed) state.mediaDrafts[id] = draft; else delete state.mediaDrafts[id];
+    card.classList.toggle('unsaved', changed);
+    show(note, changed);
+    renderSaveStatus();
+  }
   function renderMediaGrid(type, grid){
     grid.textContent = '';
     var items = mediaOf(type);
@@ -1209,29 +1301,37 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
         attachMedia(v, m.storage_path, function(){ th.textContent = ''; var d = document.createElement('div'); d.className = 'broken'; d.textContent = 'Không phát được video này'; th.appendChild(d); });
       }
       var body = document.createElement('div'); body.className = 'body';
-      var cap = document.createElement('input'); cap.type = 'text'; cap.maxLength = 300; cap.placeholder = 'Chú thích (không bắt buộc)'; cap.value = m.caption || '';
+      var cap = document.createElement('input'); cap.type = 'text'; cap.maxLength = 300; cap.placeholder = 'Chú thích (không bắt buộc)';
+      var capDraft = state.mediaDrafts[m.id];
+      cap.value = capDraft ? capDraft.caption : (m.caption || '');
+      var capNote = document.createElement('div'); capNote.className = 'unsaved-note'; capNote.textContent = 'Chú thích chưa lưu — bấm "Lưu chú thích".'; capNote.hidden = true;
+      var capCheck = function(){ trackDraft(m.id, card, capNote, trimOrNull(cap.value) !== (latestMedia(m).caption || null), { caption: cap.value }); };
+      cap.addEventListener('input', capCheck);
       var tools = document.createElement('div'); tools.className = 'tools';
       var bSave = document.createElement('button'); bSave.type = 'button'; bSave.textContent = 'Lưu chú thích';
       var bUp = document.createElement('button'); bUp.type = 'button'; bUp.textContent = '←'; bUp.title = 'Đưa lên trước'; bUp.disabled = idx === 0;
       var bDown = document.createElement('button'); bDown.type = 'button'; bDown.textContent = '→'; bDown.title = 'Đưa ra sau'; bDown.disabled = idx === items.length - 1;
       var bDel = document.createElement('button'); bDel.type = 'button'; bDel.textContent = 'Xóa'; bDel.className = 'del';
-      bSave.addEventListener('click', function(){ updateCaption(m, cap.value, type); });
+      bSave.addEventListener('click', function(){ updateCaption(m, cap.value, type, function(){ afterItemSaved(card, capCheck); }); });
       bUp.addEventListener('click', function(){ moveMedia(type, idx, -1); });
       bDown.addEventListener('click', function(){ moveMedia(type, idx, 1); });
       bDel.addEventListener('click', function(){ deleteMedia(m, type); });
       tools.appendChild(bSave); tools.appendChild(bUp); tools.appendChild(bDown); tools.appendChild(bDel);
-      body.appendChild(cap); body.appendChild(tools);
+      body.appendChild(cap); body.appendChild(capNote); body.appendChild(tools);
       card.appendChild(th); card.appendChild(body);
       grid.appendChild(card);
+      if (capDraft) capCheck();
     });
   }
   function msgEl(type){ return type === 'image' ? $('imgMsg') : (type === 'audio' ? $('audMsg') : $('vidMsg')); }
-  function updateCaption(m, value, type){
+  function updateCaption(m, value, type, after){
     var v = trimOrNull(value);
     sb.from('memorial_media').update({ caption: v }).eq('id', m.id).select('id, caption').maybeSingle().then(function(res){
       if (res.error) throw res.error;
       if (!res.data) throw { code: '42501', message: 'Không có quyền.' };
-      m.caption = res.data.caption; setMsg(msgEl(type), 'Đã lưu chú thích.', 'ok');
+      m.caption = res.data.caption; latestMedia(m).caption = res.data.caption; setMsg(msgEl(type), 'Đã lưu chú thích.', 'ok');
+      // So lại ô nhập với giá trị đã lưu: khớp → bỏ đánh dấu chưa lưu; người dùng gõ thêm trong lúc lưu → vẫn chưa lưu.
+      if (after) after();
     }).catch(function(err){ setMsg(msgEl(type), friendly(err), 'err'); });
   }
   function moveMedia(type, idx, dir){
@@ -1332,27 +1432,36 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
     if (!items.length) { var p = document.createElement('div'); p.className = 'muted'; p.textContent = 'Chưa có bản ghi âm.'; list.appendChild(p); return; }
     items.forEach(function(m, idx){
       var card = document.createElement('div'); card.className = 'a-item';
-      var title = document.createElement('input'); title.type = 'text'; title.maxLength = AUD_TITLE_MAX; title.value = m.title || ''; title.setAttribute('aria-label', 'Tiêu đề bản ghi âm');
-      var desc = document.createElement('textarea'); desc.maxLength = AUD_DESC_MAX; desc.value = m.description || ''; desc.placeholder = 'Ghi chú nội bộ (không hiện cho khách)'; desc.setAttribute('aria-label', 'Ghi chú nội bộ của bản ghi âm');
+      var audDraft = state.mediaDrafts[m.id];
+      var title = document.createElement('input'); title.type = 'text'; title.maxLength = AUD_TITLE_MAX; title.value = audDraft ? audDraft.title : (m.title || ''); title.setAttribute('aria-label', 'Tiêu đề bản ghi âm');
+      var desc = document.createElement('textarea'); desc.maxLength = AUD_DESC_MAX; desc.value = audDraft ? audDraft.description : (m.description || ''); desc.placeholder = 'Ghi chú nội bộ (không hiện cho khách)'; desc.setAttribute('aria-label', 'Ghi chú nội bộ của bản ghi âm');
+      var audNote = document.createElement('div'); audNote.className = 'unsaved-note'; audNote.textContent = 'Tiêu đề hoặc ghi chú chưa lưu — bấm "Lưu thông tin".'; audNote.hidden = true;
+      var audCheck = function(){
+        var cur = latestMedia(m);
+        var changed = title.value.trim() !== (cur.title || '') || desc.value.trim() !== (cur.description || '');
+        trackDraft(m.id, card, audNote, changed, { title: title.value, description: desc.value });
+      };
+      title.addEventListener('input', audCheck); desc.addEventListener('input', audCheck);
       var audio = document.createElement('audio'); audio.controls = true; audio.preload = 'none';
       var tools = document.createElement('div'); tools.className = 'tools';
       var bSave = document.createElement('button'); bSave.type = 'button'; bSave.textContent = 'Lưu thông tin';
       var bUp = document.createElement('button'); bUp.type = 'button'; bUp.textContent = '↑'; bUp.title = 'Đưa lên trước'; bUp.disabled = idx === 0;
       var bDown = document.createElement('button'); bDown.type = 'button'; bDown.textContent = '↓'; bDown.title = 'Đưa xuống sau'; bDown.disabled = idx === items.length - 1;
       var bDel = document.createElement('button'); bDel.type = 'button'; bDel.textContent = 'Xóa'; bDel.className = 'del';
-      bSave.addEventListener('click', function(){ saveAudioInfo(m, title.value, desc.value, bSave); });
+      bSave.addEventListener('click', function(){ saveAudioInfo(m, title.value, desc.value, bSave, function(){ afterItemSaved(card, audCheck); }); });
       bUp.addEventListener('click', function(){ if (!audBusy) moveMedia('audio', idx, -1); });
       bDown.addEventListener('click', function(){ if (!audBusy) moveMedia('audio', idx, 1); });
       bDel.addEventListener('click', function(){ deleteAudio(m, audio); });
       tools.appendChild(bSave); tools.appendChild(bUp); tools.appendChild(bDown); tools.appendChild(bDel);
-      card.appendChild(title); card.appendChild(desc); card.appendChild(audio); card.appendChild(tools);
+      card.appendChild(title); card.appendChild(desc); card.appendChild(audNote); card.appendChild(audio); card.appendChild(tools);
       list.appendChild(card);
+      if (audDraft) audCheck();
       attachMedia(audio, m.storage_path, function(){
         audio.remove(); var d = document.createElement('div'); d.className = 'broken'; d.textContent = 'Không phát được tệp ghi âm này.'; card.insertBefore(d, tools);
       });
     });
   }
-  function saveAudioInfo(m, titleVal, descVal, btn){
+  function saveAudioInfo(m, titleVal, descVal, btn, after){
     var t = (titleVal || '').trim(), d = (descVal || '').trim(), e = checkAudioText(t, d);
     if (e) { setMsg($('audMsg'), e, 'err'); return; }
     btn.disabled = true;
@@ -1360,7 +1469,9 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
       if (res.error) throw res.error;
       if (!res.data) throw { code: '42501', message: 'Không có quyền.' };
       m.title = res.data.title; m.description = res.data.description;
+      var cur = latestMedia(m); cur.title = res.data.title; cur.description = res.data.description;
       setMsg($('audMsg'), 'Đã lưu tiêu đề và ghi chú.', 'ok');
+      if (after) after();
     }).catch(function(err){ setMsg($('audMsg'), audioErr(err), 'err'); }).then(function(){ btn.disabled = false; });
   }
   // Xóa: xóa DÒNG trước (máy chủ kiểm quyền) → khách mất quyền nghe ngay; rồi xóa TỆP.
