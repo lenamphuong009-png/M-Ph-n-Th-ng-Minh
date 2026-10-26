@@ -128,6 +128,13 @@
   .lightbox{position:fixed;inset:0;background:rgba(20,24,30,0.92);display:flex;align-items:center;justify-content:center;z-index:50;padding:1rem;}
   .lightbox img{max-width:100%;max-height:100%;object-fit:contain;}
   .lightbox button{position:absolute;top:12px;right:12px;}
+  /* Hộp xác nhận trong trang (thay confirm() gốc) — bấm nút trong hộp là thao tác trực tiếp nên mở tab không bị chặn. */
+  .ask{border:1px solid var(--line);border-radius:4px;padding:1.25rem;width:calc(100% - 2rem);max-width:440px;background:#FBF8F2;color:var(--ink);}
+  .ask::backdrop{background:rgba(20,24,30,0.55);}
+  .ask h3{font-size:22px;margin:0 0 0.5rem;}
+  .ask p{margin:0;font-size:15px;line-height:1.55;}
+  .ask .actions{justify-content:flex-end;margin-top:1.1rem;}
+  .ask .btn{min-height:44px;}
   .qr-wrap{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-top:0.6rem;}
   .qr-wrap img{width:220px;max-width:100%;height:auto;border:1px solid var(--line);background:#fff;flex:none;}
   .qr-wrap .grow{flex:1 1 220px;min-width:0;}
@@ -151,6 +158,7 @@
     .msgbar #editMsg{font-size:13px;line-height:1.4;}
     .msgbar-close{padding:0.2rem 0.5rem;font-size:12.5px;}
     .sticky .btn{flex:1 1 0;min-width:0;padding:0.5rem 0.35rem;font-size:13px;}
+    .ask .actions .btn{flex:1 1 100%;}
     html{scroll-padding-bottom:112px;}
     .qr-wrap img{width:100%;max-width:260px;margin:0 auto;}
     .qr-wrap .actions .btn{flex:1 1 140px;padding:0.6rem 0.7rem;font-size:13.5px;}
@@ -431,6 +439,14 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
 </main>
 
 <div class="lightbox" id="lightbox" hidden><img id="lightboxImg" alt=""><button type="button" class="btn primary small" id="lightboxClose">Đóng ✕</button></div>
+<dialog class="ask" id="draftAsk" aria-labelledby="draftAskTitle" aria-describedby="draftAskText">
+  <h3 id="draftAskTitle">Còn mục chưa lưu</h3>
+  <p id="draftAskText"></p>
+  <div class="actions">
+    <button type="button" class="btn primary" id="draftAskBack">Quay lại để lưu</button>
+    <button type="button" class="btn" id="draftAskGo">Vẫn xem trước (không có các mục này)</button>
+  </div>
+</dialog>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"
         integrity="sha384-BWcjm9OdFth9TbhCxZPdm+gAOUMAzQy9nmTs12ioXdCcbVnJaPMn+fMUoQCLt60R"
@@ -1182,16 +1198,39 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
       'OK: tiếp tục mà không lưu các mục này.\nHủy: quay lại để lưu tại mục được đánh dấu đỏ.');
   }
 
-  $('previewBtn').addEventListener('click', function(){
-    var nDrafts = countDrafts();
-    // Có mục chưa lưu → hỏi TRƯỚC khi mở tab. Hủy: không mở tab, không ghi gì, đưa người dùng tới mục cần lưu.
-    if (nDrafts > 0 && !confirmDrafts(nDrafts, 'bản xem trước')) {
-      focusFirstDraft();
-      setMsg($('editMsg'), 'Chưa mở bản xem trước. Hãy bấm "Lưu chú thích" hoặc "Lưu thông tin" tại mục được đánh dấu đỏ, rồi bấm Xem trước lần nữa.', 'err');
+  // Hộp xác nhận trong trang. "Vẫn xem trước": onGo chạy ĐỒNG BỘ trong cú bấm và tự mở tab TRƯỚC khi đóng hộp.
+  // "Quay lại để lưu", Esc hoặc đóng hộp theo cách khác → onCancel. Không tự lưu, không xóa bản nháp.
+  var draftAskPending = null;   // { onGo, onCancel } đang chờ người dùng chọn
+  function askDrafts(n, target, onGo, onCancel){
+    var dlg = $('draftAsk');
+    if (!dlg || typeof dlg.showModal !== 'function') {          // trình duyệt cũ: hộp hỏi gốc như B1-b.1
+      if (confirmDrafts(n, target)) onGo(function(){}); else onCancel();
       return;
     }
-    // Mở tab trước (tránh bị chặn popup), lưu xong mới điều hướng tới bản xem trước.
-    var w = window.open('about:blank', '_blank');
+    $('draftAskText').textContent = 'Còn ' + n + ' mục chưa lưu (chú thích ảnh/video hoặc thông tin bản ghi âm). Nếu tiếp tục, ' +
+      target + ' sẽ KHÔNG có các thay đổi này. Chúng vẫn được giữ trên màn hình để bạn lưu sau.';
+    draftAskPending = { onGo: onGo, onCancel: onCancel };
+    dlg.showModal();
+    $('draftAskBack').focus();
+  }
+  // Mọi cách đóng hộp KHÔNG qua "Vẫn xem trước" (Quay lại, Esc, trình duyệt buộc đóng) → Hủy.
+  $('draftAsk').addEventListener('close', function(){
+    var p = draftAskPending; draftAskPending = null;
+    if (p) p.onCancel();
+  });
+  $('draftAskBack').addEventListener('click', function(){ $('draftAsk').close(); });
+  $('draftAskGo').addEventListener('click', function(){
+    var p = draftAskPending; draftAskPending = null;           // xóa trước: sự kiện close sau đó không coi là Hủy
+    if (!p) { $('draftAsk').close(); return; }
+    p.onGo(function(){ $('draftAsk').close(); });              // onGo: window.open TRƯỚC, rồi mới đóng hộp
+  });
+
+  function previewCancelled(){
+    focusFirstDraft();
+    setMsg($('editMsg'), 'Chưa mở bản xem trước. Hãy bấm "Lưu chú thích" hoặc "Lưu thông tin" tại mục được đánh dấu đỏ, rồi bấm Xem trước lần nữa.', 'err');
+  }
+  // Phần sau khi đã có tab (w): GIỮ NGUYÊN logic B1-b.1 — tab bị chặn, lưu trường chính, điều hướng, đóng tab khi lưu lỗi.
+  function continuePreview(w, nDrafts){
     // Có mục chưa lưu mà tab bị chặn: KHÔNG chuyển trang hiện tại (sẽ hỏi rời trang và có thể mất bản nháp), không lưu gì.
     if (nDrafts > 0 && !w) {
       setMsg($('editMsg'), 'Trình duyệt đã chặn tab xem trước nên chưa mở được. Các mục chưa lưu vẫn còn nguyên trên trang — hãy bấm Xem trước lần nữa.', 'err');
@@ -1204,6 +1243,20 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
     };
     if (!state.dirty) { go2(); return; }
     save().then(go2).catch(function(){ if (w) w.close(); });
+  }
+
+  $('previewBtn').addEventListener('click', function(){
+    var n = countDrafts();
+    if (n > 0) {
+      askDrafts(n, 'bản xem trước', function(closeDialog){
+        var w = window.open('about:blank', '_blank');            // LỆNH ĐẦU TIÊN, đồng bộ trong cú bấm "Vẫn xem trước"
+        closeDialog();
+        continuePreview(w, countDrafts());
+      }, previewCancelled);
+      return;
+    }
+    // Không có mục chưa lưu: như cũ — mở tab ngay trong cú bấm Xem trước (tránh bị chặn popup), lưu xong mới điều hướng.
+    continuePreview(window.open('about:blank', '_blank'), 0);
   });
 
   $('publishBtn').addEventListener('click', function(){
