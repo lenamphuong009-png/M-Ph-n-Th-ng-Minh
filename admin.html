@@ -121,6 +121,8 @@
   .qr-wrap .grow{flex:1 1 220px;min-width:0;}
   .qr-wrap code{display:block;background:var(--paper-deep);padding:4px 8px;border-radius:2px;font-size:12.5px;overflow-wrap:anywhere;margin-top:0.3rem;}
   .qr-test{display:inline-block;background:var(--danger);color:#fff;font-size:11.5px;letter-spacing:0.06em;font-weight:500;padding:3px 8px;border-radius:2px;margin-top:0.4rem;}
+  /* QR bàn giao: không mở menu lưu ảnh khi nhấn giữ (iOS) / kéo-thả — chỉ lưu qua nút "Tải PNG" (có kiểm tra lại trạng thái). */
+  #qrImg.qr-handover{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;}
   /* Chừa chỗ cho thanh nút cố định ở đáy: khi cuộn/di chuyển tới một nút (bàn phím, liên kết, cuộn tới phần tử),
      trình duyệt dừng phần tử phía trên thanh, không để thanh che. */
   html{scroll-padding-bottom:96px;}
@@ -241,8 +243,12 @@
       <h2>Mã QR</h2>
       <div class="msg" id="qrState" role="status"></div>
       <div id="qrVerify" hidden>
-        <div class="muted">Trước khi phát QR bàn giao: mở <code id="qrVerifyUrl"></code> trên điện thoại, <b>không đăng nhập</b>, kiểm tra đúng hồ sơ, rồi bấm xác nhận.</div>
-        <div class="upload-row"><button type="button" class="btn small" id="qrVerifyBtn">Tôi đã kiểm tra — địa chỉ mở đúng hồ sơ</button></div>
+        <div class="qr-test" id="qrVerifyTrial" hidden>STAGING — CHỈ THỬ XÁC NHẬN ĐỊA CHỈ. MÃ QR VẪN LÀ THỬ NGHIỆM, KHÔNG BÀN GIAO</div>
+        <div class="msg" id="qrVerifyState" role="status"></div>
+        <div id="qrVerifyAct" hidden>
+          <div class="muted">Mở <code id="qrVerifyUrl"></code> trên điện thoại, <b>không đăng nhập</b>, kiểm tra đúng hồ sơ, rồi bấm xác nhận.</div>
+          <div class="upload-row"><button type="button" class="btn small" id="qrVerifyBtn">Tôi đã kiểm tra — địa chỉ mở đúng hồ sơ</button></div>
+        </div>
       </div>
       <div id="qrBody" hidden>
         <div class="qr-wrap">
@@ -255,7 +261,7 @@
               <button type="button" class="btn small" id="qrDownloadBtn">Tải PNG</button>
               <button type="button" class="btn small" id="qrCopyBtn">Sao chép đường dẫn</button>
             </div>
-            <div class="muted" style="margin-top:0.5rem">Trên iPhone: nếu bấm "Tải PNG" không lưu được tệp, hãy nhấn giữ vào ảnh mã QR rồi chọn "Lưu vào Ảnh".</div>
+            <div class="muted" id="qrSaveHint" style="margin-top:0.5rem">Trên iPhone: nếu bấm "Tải PNG" không lưu được tệp, hãy nhấn giữ vào ảnh mã QR rồi chọn "Lưu vào Ảnh".</div>
           </div>
         </div>
       </div>
@@ -570,7 +576,7 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
     throw e;
   }
 
-  var state = { user: null, canCreate: false, graves: [], cur: null, media: [], dirty: false,
+  var state = { user: null, canCreate: false, graves: [], cur: null, curCanVerify: false, media: [], dirty: false,
                 pendingByGrave: {}, gb: [], gbFilter: 'pending' };
 
   // ===== ĐIỀU HƯỚNG =====
@@ -710,13 +716,30 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
     state.dirty = false; openList();
   });
 
+  // Vai của CHÍNH tài khoản trên hồ sơ (policy chỉ trả dòng của mình). Chỉ dùng để ẩn/hiện nút xác nhận địa chỉ —
+  // quyền thật do RPC tn_set_public_url_verified + quyền CSDL quyết định. Đọc lỗi → coi như KHÔNG có quyền.
+  function loadCanVerify(id){
+    var uid = state.user && state.user.id;
+    if (!uid) return Promise.resolve(false);
+    return sb.from('grave_managers').select('role, revoked_at, expires_at').eq('grave_id', id).eq('user_id', uid).then(function(r){
+      if (r.error || !Array.isArray(r.data)) return false;
+      var now = Date.now();
+      return r.data.some(function(m){
+        return m.role === 'phyverse_support' && !m.revoked_at && (!m.expires_at || Date.parse(m.expires_at) > now);
+      });
+    }, function(){ return false; });
+  }
+
   function openEditor(id){
     go('viewEdit');
     setMsg($('editMsg'), 'Đang tải…');
-    sb.from('graves').select(GRAVE_EDIT_COLS).eq('id', id).maybeSingle().then(function(res){
+    state.curCanVerify = false;
+    Promise.all([sb.from('graves').select(GRAVE_EDIT_COLS).eq('id', id).maybeSingle(), loadCanVerify(id)]).then(function(rs){
+      var res = rs[0];
       if (res.error) throw res.error;
       if (!res.data) { setMsg($('editMsg'), 'Không mở được trang này (không tồn tại hoặc không có quyền).', 'err'); return; }
       state.cur = res.data;
+      state.curCanVerify = rs[1] === true;
       fillForm();
       markSaved('Đã tải bản lưu gần nhất.');
       setMsg($('editMsg'), '');
@@ -730,14 +753,29 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
     var g = state.cur;
     Object.keys(FIELD_MAP).forEach(function(id){ $(id).value = g[FIELD_MAP[id]] || ''; });
     $('edTitle').textContent = g.deceased_name;
-    var b = $('edBadge'); b.className = 'badge ' + (g.is_published ? 'pub' : 'draft'); b.textContent = g.is_published ? 'Đã xuất bản' : 'Nháp';
-    $('edLink').textContent = publicUrl(g.memorial_slug) || 'Chưa có địa chỉ công khai hợp lệ';
-    $('publishBtn').textContent = g.is_published ? 'Ngừng xuất bản' : 'Xuất bản';
-    $('publishBtn').className = g.is_published ? 'btn danger' : 'btn brass';
+    renderPublishState();
     renderPortrait();
     renderRepeater('tl', Array.isArray(g.timeline) ? g.timeline : []);
     renderRepeater('ws', Array.isArray(g.wishes) ? g.wishes : []);
     renderQr();
+  }
+  function renderPublishState(){
+    var g = state.cur;
+    var b = $('edBadge'); b.className = 'badge ' + (g.is_published ? 'pub' : 'draft'); b.textContent = g.is_published ? 'Đã xuất bản' : 'Nháp';
+    $('edLink').textContent = publicUrl(g.memorial_slug) || 'Chưa có địa chỉ công khai hợp lệ';
+    $('publishBtn').textContent = g.is_published ? 'Ngừng xuất bản' : 'Xuất bản';
+    $('publishBtn').className = g.is_published ? 'btn danger' : 'btn brass';
+  }
+  // Tải lại TRẠNG THÁI máy chủ (xuất bản, slug) của hồ sơ đang mở mà KHÔNG ghi đè các ô đang sửa dở.
+  function reloadPublishState(id){
+    return sb.from('graves').select('id, memorial_slug, is_published').eq('id', id).maybeSingle().then(function(res){
+      if (res.error || !res.data) return false;
+      if (!state.cur || state.cur.id !== id) return false;
+      state.cur.is_published = res.data.is_published;
+      state.cur.memorial_slug = res.data.memorial_slug;
+      renderPublishState(); renderQr();
+      return true;
+    }, function(){ return false; });
   }
 
   // ===== MÃ QR =====
@@ -750,11 +788,20 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
   var QR_MODE_BY_ENV = { staging: 'test', production: 'handover' };
   var QR_ENV = TN_ENV && Object.prototype.hasOwnProperty.call(QR_MODE_BY_ENV, TN_ENV_NAME) ? { mode: QR_MODE_BY_ENV[TN_ENV_NAME] } : null;
   var QR_TEST_LABEL = 'QR THỬ NGHIỆM — KHÔNG BÀN GIAO';
-  var qrCur = null; // { url, slug, test, canvas } — chỉ có khi trang đã xuất bản (theo dữ liệu máy chủ)
+  var qrCur = null; // { url, slug, test, canvas, id, verifiedAt } — chỉ có khi trang đã xuất bản (theo dữ liệu máy chủ)
+  // CHỐT CHẶN: QR bàn giao (không viền đỏ) CHỈ có thể vẽ khi đúng môi trường production đã cấu hình.
+  var QR_HANDOVER_ALLOWED = TN_ENV_NAME === 'production' && !!TN_ENV && !!QR_ENV && QR_ENV.mode === 'handover';
+  // Thử giao diện XÁC NHẬN ĐỊA CHỈ trên môi trường không phải production: chỉ hiện khối xác nhận khi URL có
+  // ?thu_xac_nhan=1. Tham số này CHỈ điều khiển giao diện — quyền thật do RPC tn_set_public_url_verified và quyền CSDL
+  // quyết định; mã QR vẫn LUÔN là thử nghiệm. Đọc một lần lúc tải trang (trước mọi thao tác dọn URL).
+  var VERIFY_UI_TRIAL = !QR_HANDOVER_ALLOWED && (function(){
+    try { return new URLSearchParams(window.location.search).get('thu_xac_nhan') === '1'; } catch (e) { return false; }
+  })();
 
   // Vẽ mã QR lên canvas: mức sửa lỗi M, lề trắng 4 ô. Bản thử nghiệm có viền đỏ và dòng chữ cảnh báo
   // ở dải trên/dưới — nằm NGOÀI vùng mã nên vẫn quét được, và có sẵn trong ảnh PNG tải xuống.
   function drawQr(url, isTest){
+    if (!QR_HANDOVER_ALLOWED) isTest = true;
     var qr = qrcode(0, 'M');
     qr.addData(url);
     qr.make();
@@ -794,7 +841,8 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
     $('qrImg').removeAttribute('src');
     $('qrUrl').textContent = '';
     show($('qrTestBadge'), false);
-    show($('qrVerify'), false);
+    show($('qrVerify'), false); show($('qrVerifyAct'), false); show($('qrVerifyTrial'), false);
+    setMsg($('qrVerifyState'), '');
     if (!g || g.is_published !== true) {
       setMsg($('qrState'), 'Trang chưa xuất bản — chưa có mã QR bàn giao. Mã QR chỉ xuất hiện sau khi trang được xuất bản thành công.');
       return;
@@ -813,70 +861,158 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
       setMsg($('qrState'), 'Không tải được thư viện tạo mã QR. Các chức năng quản lý khác không bị ảnh hưởng — hãy tải lại trang.', 'err');
       return;
     }
-    var isTest = QR_ENV.mode !== 'handover';
-    if (!isTest) {
-      // BÀN GIAO: chỉ khi đã xác nhận địa chỉ công khai mở đúng hồ sơ (đọc riêng — staging không có cột này).
-      setMsg($('qrState'), 'Đang kiểm tra xác nhận địa chỉ công khai…');
-      sb.from('graves').select('public_url_verified_at').eq('id', g.id).maybeSingle().then(function(res){
-        if (state.cur !== g) return;
-        if (res.error || !res.data) { setMsg($('qrState'), 'Chưa kiểm tra được trạng thái xác nhận địa chỉ — không tạo QR bàn giao.', 'err'); return; }
-        if (!res.data.public_url_verified_at) {
-          $('qrVerifyUrl').textContent = url; show($('qrVerify'), true);
-          setMsg($('qrState'), 'Chưa có mã QR bàn giao: cần xác nhận địa chỉ công khai ' + url + ' trước.', 'err');
-          return;
-        }
-        drawQrCard(url, slug, false);
-      }, function(){ if (state.cur === g) setMsg($('qrState'), 'Chưa kiểm tra được trạng thái xác nhận địa chỉ — không tạo QR bàn giao.', 'err'); });
+    if (!QR_HANDOVER_ALLOWED) {
+      // KHÔNG PHẢI production → LUÔN QR thử nghiệm. Khối xác nhận (nếu bật ?thu_xac_nhan=1) không ảnh hưởng QR.
+      drawQrCard(url, slug, true);
+      if (VERIFY_UI_TRIAL) loadVerifyState(g, url);
       return;
     }
-    drawQrCard(url, slug, true);
+    // BÀN GIAO (production): chỉ khi đã xác nhận địa chỉ công khai mở đúng hồ sơ.
+    setMsg($('qrState'), 'Đang kiểm tra xác nhận địa chỉ công khai…');
+    loadVerifyState(g, url).then(function(v){
+      if (state.cur !== g) return;
+      if (v === null) { setMsg($('qrState'), 'Chưa kiểm tra được trạng thái xác nhận địa chỉ — không tạo QR bàn giao.', 'err'); return; }
+      if (!v) { setMsg($('qrState'), 'Chưa có mã QR bàn giao: cần xác nhận địa chỉ công khai ' + url + ' trước.', 'err'); return; }
+      drawQrCard(url, slug, false, { id: g.id, verifiedAt: v });
+    });
+  }
+  // Đọc trạng thái xác nhận MỚI NHẤT từ máy chủ và hiện khối xác nhận. Trả về: chuỗi thời điểm (đã xác nhận),
+  // '' (chưa xác nhận) hoặc null (không đọc được). Nút xác nhận chỉ hiện cho phyverse_support còn hiệu lực.
+  function loadVerifyState(g, url){
+    $('qrVerifyUrl').textContent = url;
+    show($('qrVerifyTrial'), !QR_HANDOVER_ALLOWED);
+    setMsg($('qrVerifyState'), 'Đang đọc trạng thái xác nhận địa chỉ…');
+    show($('qrVerify'), true);
+    return sb.from('graves').select('public_url_verified_at').eq('id', g.id).maybeSingle().then(function(res){
+      if (res.error || !res.data) return null;
+      return res.data.public_url_verified_at || '';
+    }, function(){ return null; }).then(function(v){
+      if (state.cur !== g) return v;
+      if (v === null) {
+        setMsg($('qrVerifyState'), 'Chưa đọc được trạng thái xác nhận địa chỉ — không hiện nút xác nhận. Hãy tải lại trang.', 'err');
+        show($('qrVerifyAct'), false);
+        return v;
+      }
+      if (v) setMsg($('qrVerifyState'), 'Đã xác nhận địa chỉ công khai lúc ' + new Date(v).toLocaleString('vi-VN') +
+        (QR_HANDOVER_ALLOWED ? '.' : ' (chỉ để thử — mã QR vẫn là THỬ NGHIỆM).'), 'ok');
+      else setMsg($('qrVerifyState'), state.curCanVerify ? 'Chưa xác nhận địa chỉ công khai ' + url + '.'
+        : 'Chưa xác nhận địa chỉ công khai ' + url + '. Chỉ nhân sự Phyverse (vai phyverse_support) của hồ sơ này mới xác nhận được.', 'err');
+      show($('qrVerifyAct'), !v && state.curCanVerify === true);
+      return v;
+    });
   }
   $('qrVerifyBtn').addEventListener('click', function(){
-    var g = state.cur, btn = this; if (!g || !publicUrl(g.memorial_slug)) return;
+    var g = state.cur, btn = this;
+    if (!g || g.is_published !== true || state.curCanVerify !== true || !publicUrl(g.memorial_slug)) return;
+    if (!QR_HANDOVER_ALLOWED && !VERIFY_UI_TRIAL) return;
     if (!confirm('Xác nhận bạn đã mở ' + publicUrl(g.memorial_slug) + ' trên điện thoại (không đăng nhập) và thấy ĐÚNG hồ sơ này?')) return;
     btn.disabled = true;
     sb.rpc('tn_set_public_url_verified', { p_grave_id: g.id, p_verified: true }).then(function(res){
       if (res.error) throw res.error;
-      show($('qrVerify'), false); renderQr();
-    }).catch(function(err){ setMsg($('qrState'), friendly(err), 'err'); }).then(function(){ btn.disabled = false; });
+      if (state.cur === g) renderQr();
+    }).catch(function(err){
+      if (state.cur !== g) return;
+      if (err && err.code === '22023') {
+        // Máy chủ từ chối vì dữ liệu không hợp lệ (VD hồ sơ đã bị ngừng xuất bản ở nơi khác): giữ nguyên lý do gốc,
+        // tải lại trạng thái hồ sơ để giao diện không hiển thị trạng thái cũ.
+        var why = 'Chưa xác nhận được: ' + ((err.message || 'dữ liệu không hợp lệ').replace(/\.$/, '')) + ' (mã 22023).';
+        setMsg($('editMsg'), why + ' Đang tải lại trạng thái hồ sơ…', 'err');
+        reloadPublishState(g.id).then(function(ok){
+          if (state.cur !== g) return;
+          setMsg($('editMsg'), why + (ok ? ' Đã tải lại trạng thái hồ sơ.' : ' Chưa tải lại được trạng thái hồ sơ — hãy tải lại trang.'), 'err');
+        });
+        return;
+      }
+      setMsg($('qrVerifyState'), friendly(err), 'err');
+    }).then(function(){ btn.disabled = false; });
   });
-  function drawQrCard(url, slug, isTest){
+  function drawQrCard(url, slug, isTest, meta){
+    if (!QR_HANDOVER_ALLOWED) isTest = true;
     var canvas;
     try { canvas = drawQr(url, isTest); }
     catch (e) { setMsg($('qrState'), 'Không tạo được mã QR cho trang này.', 'err'); return; }
-    qrCur = { url: url, slug: slug, test: isTest, canvas: canvas };
+    qrCur = { url: url, slug: slug, test: isTest, canvas: canvas,
+              id: meta && meta.id || null, verifiedAt: meta && meta.verifiedAt || null };
     $('qrImg').src = canvas.toDataURL('image/png');
+    $('qrImg').classList.toggle('qr-handover', !isTest);
+    $('qrImg').draggable = isTest;
     $('qrUrl').textContent = url;
     show($('qrTestBadge'), isTest);
+    show($('qrSaveHint'), isTest);   // hướng dẫn nhấn giữ để lưu: CHỈ cho QR thử nghiệm
     show($('qrBody'), true);
     if (isTest) setMsg($('qrState'), 'Mã QR THỬ NGHIỆM — chỉ mở được khi tên miền ' + url + ' đã được tạo DNS và thêm alias. ' +
       'Hãy quét thử bằng điện thoại chưa đăng nhập trước khi dùng. KHÔNG bàn giao cho khách.', 'err');
     else setMsg($('qrState'), 'Mã QR bàn giao — địa chỉ công khai đã được xác nhận mở đúng hồ sơ.', 'ok');
   }
 
+  // QR BÀN GIAO: trước khi tải PNG / sao chép, đọc lại trạng thái MỚI NHẤT. Chỉ dùng được khi hồ sơ vẫn xuất bản,
+  // slug và địa chỉ không đổi, và vẫn còn ĐÚNG lần xác nhận đã dùng để vẽ QR. Sai / không đọc được → chặn, bỏ QR cũ.
+  // QR thử nghiệm: không cần kiểm (luôn mang nhãn thử nghiệm).
+  function recheckHandover(cur){
+    if (cur.test) return Promise.resolve(true);
+    return sb.from('graves').select('id, memorial_slug, is_published, public_url_verified_at').eq('id', cur.id).maybeSingle().then(function(res){
+      return (res && !res.error) ? { d: res.data } : null;
+    }, function(){ return null; }).then(function(r){
+      var d = r && r.d;
+      var ok = !!d && d.id === cur.id && d.is_published === true && d.memorial_slug === cur.slug &&
+               publicUrl(d.memorial_slug) === cur.url && !!d.public_url_verified_at && String(d.public_url_verified_at) === String(cur.verifiedAt);
+      if (ok) return true;
+      if (qrCur === cur) {
+        qrCur = null; show($('qrBody'), false); $('qrImg').removeAttribute('src'); $('qrUrl').textContent = '';
+      }
+      if (!r) {
+        setMsg($('qrState'), 'Chưa kiểm tra được trạng thái hiện tại của hồ sơ — không dùng mã QR bàn giao cũ. Hãy thử lại.', 'err');
+      } else {
+        setMsg($('editMsg'), 'Trạng thái hồ sơ đã thay đổi (xuất bản, đường dẫn hoặc xác nhận địa chỉ) — mã QR bàn giao cũ đã bị chặn và được tải lại.', 'err');
+        if (d && state.cur && state.cur.id === d.id) {
+          state.cur.is_published = d.is_published; state.cur.memorial_slug = d.memorial_slug;
+          renderPublishState(); renderQr();
+        } else if (state.cur) { renderQr(); }
+      }
+      return false;
+    });
+  }
+
+  // QR bàn giao: chặn menu chuột phải / kéo-thả trên ảnh (đường lưu ảnh không qua kiểm tra lại). QR thử nghiệm: giữ nguyên.
+  ['contextmenu', 'dragstart'].forEach(function(ev){
+    $('qrImg').addEventListener(ev, function(e){ if (qrCur && !qrCur.test) e.preventDefault(); });
+  });
+
   $('qrDownloadBtn').addEventListener('click', function(){
     if (!qrCur) return;
-    var name = (qrCur.test ? 'QR-THU-NGHIEM-' : 'QR-') + qrCur.slug + '.png';
     var cur = qrCur;
+    var isTest = cur.test || !QR_HANDOVER_ALLOWED;
+    var name = (isTest ? 'QR-THU-NGHIEM-' : 'QR-') + cur.slug + '.png';
     var a = document.createElement('a');
     if (!('download' in a) || !cur.canvas.toBlob) {
-      setMsg($('qrState'), 'Trình duyệt này không tải tệp trực tiếp được — hãy nhấn giữ vào ảnh mã QR rồi chọn "Lưu ảnh".', 'err');
+      // QR thử nghiệm: giữ hướng dẫn nhấn giữ như cũ. QR bàn giao: KHÔNG có đường lưu thay thế bỏ qua bước kiểm tra lại.
+      setMsg($('qrState'), isTest ? 'Trình duyệt này không tải tệp trực tiếp được — hãy nhấn giữ vào ảnh mã QR rồi chọn "Lưu ảnh".'
+        : 'Trình duyệt này không hỗ trợ tải tệp trực tiếp — không thể tải mã QR bàn giao an toàn tại đây (cần kiểm tra lại trạng thái hồ sơ ngay trước khi lưu). ' +
+          'Hãy mở trang quản lý bằng trình duyệt khác (Chrome, Safari hoặc Edge bản mới) rồi bấm "Tải PNG".', 'err');
       return;
     }
-    cur.canvas.toBlob(function(blob){
-      if (!blob) { setMsg($('qrState'), 'Không tạo được tệp PNG — hãy nhấn giữ vào ảnh mã QR để lưu.', 'err'); return; }
-      var u = URL.createObjectURL(blob);
-      a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(function(){ URL.revokeObjectURL(u); }, 4000);
-    }, 'image/png');
+    recheckHandover(cur).then(function(ok){
+      if (!ok || qrCur !== cur) return;
+      cur.canvas.toBlob(function(blob){
+        if (!blob) { setMsg($('qrState'), isTest ? 'Không tạo được tệp PNG — hãy nhấn giữ vào ảnh mã QR để lưu.'
+          : 'Không tạo được tệp PNG của mã QR bàn giao — hãy bấm "Tải PNG" lại. Không lưu mã QR bàn giao bằng cách khác.', 'err'); return; }
+        var u = URL.createObjectURL(blob);
+        a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function(){ URL.revokeObjectURL(u); }, 4000);
+      }, 'image/png');
+    });
   });
 
   $('qrCopyBtn').addEventListener('click', function(){
     if (!qrCur) return;
-    var t = qrCur.url;
-    (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function(){
-      setMsg($('editMsg'), 'Đã sao chép đường dẫn trong mã QR.', 'ok');
-    }).catch(function(){ prompt('Sao chép đường dẫn:', t); });
+    var cur = qrCur, t = cur.url;
+    var copy = function(){
+      (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function(){
+        setMsg($('editMsg'), 'Đã sao chép đường dẫn trong mã QR.', 'ok');
+      }).catch(function(){ prompt('Sao chép đường dẫn:', t); });
+    };
+    if (cur.test || !QR_HANDOVER_ALLOWED) { copy(); return; }
+    recheckHandover(cur).then(function(ok){ if (ok && qrCur === cur) copy(); });
   });
 
   // --- Danh sách lặp: dòng thời gian (tl) & di nguyện (ws) ---
