@@ -1167,10 +1167,41 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
   }
   $('saveBtn').addEventListener('click', function(){ save().catch(function(){}); });
 
+  // ----- Mục chú thích / thông tin bản ghi âm CHƯA LƯU (state.mediaDrafts) khi Xem trước -----
+  // Chỉ ĐỌC state.mediaDrafts: không tự lưu, không xóa bản nháp. Các mục này lưu bằng nút riêng tại từng mục.
+  function countDrafts(){ return Object.keys(state.mediaDrafts).length; }
+  function focusFirstDraft(){
+    var el = document.querySelector('#imgGrid .m-item.unsaved, #vidGrid .m-item.unsaved, #audList .a-item.unsaved');
+    if (!el) return;
+    el.scrollIntoView({ block: 'center' });
+    var f = el.querySelector('input[type=text], textarea'); if (f) { try { f.focus({ preventScroll: true }); } catch (e) { f.focus(); } }
+  }
+  function confirmDrafts(n, target){
+    return confirm('Còn ' + n + ' mục chưa lưu (chú thích ảnh/video hoặc thông tin bản ghi âm).\n\n' +
+      'Nếu tiếp tục, ' + target + ' sẽ KHÔNG có các thay đổi này. Chúng vẫn được giữ trên màn hình để bạn lưu sau.\n\n' +
+      'OK: tiếp tục mà không lưu các mục này.\nHủy: quay lại để lưu tại mục được đánh dấu đỏ.');
+  }
+
   $('previewBtn').addEventListener('click', function(){
+    var nDrafts = countDrafts();
+    // Có mục chưa lưu → hỏi TRƯỚC khi mở tab. Hủy: không mở tab, không ghi gì, đưa người dùng tới mục cần lưu.
+    if (nDrafts > 0 && !confirmDrafts(nDrafts, 'bản xem trước')) {
+      focusFirstDraft();
+      setMsg($('editMsg'), 'Chưa mở bản xem trước. Hãy bấm "Lưu chú thích" hoặc "Lưu thông tin" tại mục được đánh dấu đỏ, rồi bấm Xem trước lần nữa.', 'err');
+      return;
+    }
     // Mở tab trước (tránh bị chặn popup), lưu xong mới điều hướng tới bản xem trước.
     var w = window.open('about:blank', '_blank');
-    var go2 = function(){ var u = pageUrl(state.cur.memorial_slug, true); if (w) w.location.href = u; else window.location.href = u; };
+    // Có mục chưa lưu mà tab bị chặn: KHÔNG chuyển trang hiện tại (sẽ hỏi rời trang và có thể mất bản nháp), không lưu gì.
+    if (nDrafts > 0 && !w) {
+      setMsg($('editMsg'), 'Trình duyệt đã chặn tab xem trước nên chưa mở được. Các mục chưa lưu vẫn còn nguyên trên trang — hãy bấm Xem trước lần nữa.', 'err');
+      return;
+    }
+    var go2 = function(){
+      var u = pageUrl(state.cur.memorial_slug, true); if (w) w.location.href = u; else window.location.href = u;
+      if (nDrafts > 0) setMsg($('editMsg'), 'Đã mở bản xem trước. Lưu ý: bản xem trước KHÔNG có ' + nDrafts +
+        ' mục chưa lưu (chú thích hoặc thông tin bản ghi âm) — các mục này vẫn đang chờ bạn lưu trên trang.', 'err');
+    };
     if (!state.dirty) { go2(); return; }
     save().then(go2).catch(function(){ if (w) w.close(); });
   });
