@@ -231,7 +231,7 @@
         <label class="f" for="newName">Họ và tên người đã khuất</label>
         <input type="text" id="newName" maxlength="200" required>
         <label class="f" for="newSlug">Đường dẫn riêng <span class="hint">(chữ thường không dấu, số, dấu gạch ngang — không đổi được sau khi tạo)</span></label>
-        <input type="text" id="newSlug" maxlength="100" required pattern="[a-z0-9]+(-[a-z0-9]+)*">
+        <input type="text" id="newSlug" maxlength="63" required pattern="[a-z0-9]+(-[a-z0-9]+)*">
         <div class="muted" id="newSlugPreview"></div>
         <div class="actions"><button class="btn primary" type="submit" id="createBtn">Tạo trang</button></div>
         <div class="msg" id="createMsg" role="alert"></div>
@@ -516,7 +516,7 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
   }
   function slugify(s){
     return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g,'d').replace(/Đ/g,'d')
-      .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100).replace(/-+$/,'');
+      .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, DNS_LABEL_MAX).replace(/-+$/,'');
   }
   function initialOf(name){
     var w = (name || '').normalize('NFC').trim().split(/\s+/);
@@ -736,7 +736,7 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
     var name = $('newName').value.trim(), slug = $('newSlug').value.trim();
     if (!name) { setMsg($('createMsg'), 'Vui lòng nhập họ tên.', 'err'); return; }
     if (SLUG_RE.test(slug) && slug.length >= 3 && !publicUrl(slug)) { setMsg($('createMsg'), 'Đường dẫn này không dùng được làm địa chỉ công khai (tối đa 63 ký tự, không dùng tên dành riêng).', 'err'); return; }
-    if (slug.length < 3 || !SLUG_RE.test(slug)) { setMsg($('createMsg'), 'Đường dẫn chỉ gồm chữ thường không dấu, số và dấu gạch ngang (3–100 ký tự), không bắt đầu/kết thúc bằng gạch ngang.', 'err'); return; }
+    if (slug.length < 3 || !SLUG_RE.test(slug)) { setMsg($('createMsg'), 'Đường dẫn chỉ gồm chữ thường không dấu, số và dấu gạch ngang (3–63 ký tự), không bắt đầu/kết thúc bằng gạch ngang.', 'err'); return; }
     var btn = $('createBtn'); btn.disabled = true; setMsg($('createMsg'), 'Đang tạo…');
     sb.rpc('create_memorial', { p_slug: slug, p_name: name }).then(function(res){
       if (res.error) throw res.error;
@@ -914,7 +914,11 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
     show($('qrVerify'), false); show($('qrVerifyAct'), false); show($('qrVerifyTrial'), false);
     setMsg($('qrVerifyState'), '');
     if (!g || g.is_published !== true) {
-      setMsg($('qrState'), 'Trang chưa xuất bản — chưa có mã QR bàn giao. Mã QR chỉ xuất hiện sau khi trang được xuất bản thành công.');
+      // Câu chữ cho môi trường KHÔNG bàn giao (staging): không hứa hẹn QR bàn giao. Production giữ nguyên câu cũ.
+      setMsg($('qrState'), QR_HANDOVER_ALLOWED
+        ? 'Trang chưa xuất bản — chưa có mã QR bàn giao. Mã QR chỉ xuất hiện sau khi trang được xuất bản thành công.'
+        : 'Trang chưa xuất bản — chưa có mã QR. Sau khi xuất bản sẽ có mã QR THỬ NGHIỆM để kiểm tra nội bộ; ' +
+          'mã QR bàn giao cho khách chỉ có trên hệ thống chính thức, sau khi Phyverse xác nhận địa chỉ công khai.');
       return;
     }
     if (!QR_ENV) {
@@ -1010,8 +1014,8 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
     show($('qrTestBadge'), isTest);
     show($('qrSaveHint'), isTest);   // hướng dẫn nhấn giữ để lưu: CHỈ cho QR thử nghiệm
     show($('qrBody'), true);
-    if (isTest) setMsg($('qrState'), 'Mã QR THỬ NGHIỆM — chỉ mở được khi tên miền ' + url + ' đã được tạo DNS và thêm alias. ' +
-      'Hãy quét thử bằng điện thoại chưa đăng nhập trước khi dùng. KHÔNG bàn giao cho khách.', 'err');
+    if (isTest) setMsg($('qrState'), 'Mã QR THỬ NGHIỆM — chỉ dùng để kiểm tra nội bộ, KHÔNG bàn giao cho khách. ' +
+      'Địa chỉ ' + url + ' chỉ mở được khi tên miền đã được cấu hình — hãy quét thử bằng điện thoại chưa đăng nhập.', 'err');
     else setMsg($('qrState'), 'Mã QR bàn giao — địa chỉ công khai đã được xác nhận mở đúng hồ sơ.', 'ok');
   }
 
@@ -1153,7 +1157,7 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
       var t = new Date();
       markSaved('Đã lưu lúc ' + t.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '.');
       setMsg($('editMsg'), state.cur.is_published
-        ? 'Đã lưu. Trang đang công khai — khách sẽ thấy nội dung mới khi mở hoặc tải lại trang.'
+        ? 'Đã lưu thay đổi.'
         : 'Đã lưu bản nháp. Khách chưa xem được cho tới khi bạn bấm Xuất bản.', 'ok');
       return res.data;
     }).catch(function(err){
