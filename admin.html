@@ -69,6 +69,7 @@
   .msgbar-close{flex:none;border:1px solid var(--line);background:#fff;border-radius:2px;padding:0.25rem 0.6rem;font-family:inherit;font-size:13px;color:var(--ink);cursor:pointer;}
   .sticky .live-note{flex:1 1 100%;order:-1;font-size:13px;color:var(--ink-soft);}
   .sticky .live-note .ln-short{display:none;}   /* câu ngắn chỉ hiện trên điện thoại */
+  @media (min-width:561px) and (max-width:640px){ .sticky:has(#liveNote:not([hidden])) .status{flex:1 1 100%;} }   /* trang công khai: trạng thái lên hàng riêng để 3 nút cùng hàng */
   .env.unknown{background:var(--danger);color:#fff;}
   .link-note{font-size:13px;color:var(--ink-soft);margin-top:0.35rem;}
   .m-item.unsaved,.a-item.unsaved{border-color:var(--danger);}
@@ -161,7 +162,7 @@
     .msgbar{padding:0.3rem 0.3rem 0.3rem 0.5rem;}
     .msgbar #editMsg{font-size:13px;line-height:1.4;}
     .msgbar-close{padding:0.2rem 0.5rem;font-size:12.5px;}
-    .sticky .btn{flex:1 1 0;min-width:0;padding:0.5rem 0.35rem;font-size:13px;}
+    .sticky .btn{flex:1 1 auto;min-width:0;padding:0.5rem 0.35rem;font-size:13px;}
     .ask .actions .btn{flex:1 1 100%;}
     /* B2 (UI-07/UI-06): nút dễ bấm trên điện thoại — thao tác chính ≥44px, nút thường ≥40px */
     .btn{min-height:40px;}
