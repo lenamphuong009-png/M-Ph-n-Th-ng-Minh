@@ -11,8 +11,9 @@
 <style>
   :root{
     --ink:#1C232D; --ink-soft:#2A3341; --paper:#F4EEE2; --paper-deep:#EAE1CF;
-    --brass:#B08A55; --brass-light:#D3B583; --sage:#6E7F6C;
+    --brass:#B08A55; --brass-light:#D3B583; --sage:#5B6B59;   /* B2: sage đậm hơn — chữ phụ đạt ≥4.5:1 trên nền trang/thẻ */
     --line:rgba(28,35,45,0.18); --danger:#B0553F; --ok:#4F6B4C;
+    --danger-text:#9E4A36;   /* B2: CHỈ cho chữ lỗi/cảnh báo (≥4.5:1). --danger giữ nguyên cho viền, nền, nhãn QR thử nghiệm */
   }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--paper);color:var(--ink);font-family:'Be Vietnam Pro',sans-serif;font-weight:300;line-height:1.6;}
@@ -28,23 +29,23 @@
   h1,h2,h3{font-family:'Cormorant Garamond',serif;font-weight:500;margin:0;}
   h1{font-size:30px;}
   h2{font-size:23px;margin-bottom:0.25rem;}
-  .muted{color:var(--sage);font-size:13.5px;}
+  .muted{color:var(--sage);font-size:14.5px;}
   .card{background:#FBF8F2;border:1px solid var(--line);border-radius:4px;padding:1.25rem;margin-top:1.25rem;}
-  label.f{display:block;font-size:13px;font-weight:500;margin:0.9rem 0 0.3rem;}
+  label.f{display:block;font-size:15px;font-weight:500;margin:0.9rem 0 0.3rem;}
   label.f .hint{font-weight:300;color:var(--sage);margin-left:4px;}
-  input[type=text],input[type=email],input[type=password],textarea{width:100%;border:1px solid var(--line);background:var(--paper);border-radius:2px;padding:0.6rem 0.7rem;font-family:inherit;font-size:14.5px;color:var(--ink);}
+  input[type=text],input[type=email],input[type=password],textarea{width:100%;border:1px solid var(--line);background:var(--paper);border-radius:2px;padding:0.6rem 0.7rem;font-family:inherit;font-size:16px;color:var(--ink);}
   textarea{resize:vertical;min-height:90px;}
   input:focus,textarea:focus{outline:none;border-color:var(--brass);}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px;}
   .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;font-family:inherit;font-size:14px;font-weight:500;border-radius:2px;padding:0.6rem 1.1rem;cursor:pointer;border:1px solid var(--ink);background:none;color:var(--ink);text-decoration:none;}
   .btn.primary{background:var(--ink);color:var(--paper);}
   .btn.brass{background:var(--brass);border-color:var(--brass);color:var(--ink);}
-  .btn.danger{border-color:var(--danger);color:var(--danger);}
+  .btn.danger{border-color:var(--danger);color:var(--danger-text);}
   .btn.small{font-size:12.5px;padding:0.35rem 0.7rem;}
   .btn:disabled{opacity:0.55;cursor:default;}
   .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:1rem;}
   .msg{font-size:13.5px;margin-top:0.75rem;min-height:1.2em;}
-  .msg.err{color:var(--danger);} .msg.ok{color:var(--ok);}
+  .msg.err{color:var(--danger-text);} .msg.ok{color:var(--ok);}
   .login{max-width:400px;margin:3rem auto;}
   .list-item{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line);padding:0.9rem 0;}
   .list-item:first-child{border-top:none;}
@@ -56,9 +57,9 @@
   .badge.pub{background:var(--ok);color:#fff;}
   .editor-head{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;}
   .editor-head .grow{flex:1 1 260px;min-width:0;}
-  .sticky{position:sticky;bottom:0;background:rgba(244,238,226,0.97);border-top:1px solid var(--line);padding:0.75rem 1rem;margin:2rem -1rem 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;z-index:5;}
+  .sticky{position:sticky;bottom:0;background:var(--paper);border-top:1px solid var(--line);padding:0.75rem 1rem;margin:2rem -1rem 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;z-index:5;}
   .sticky .status{flex:1 1 180px;font-size:13px;color:var(--sage);}
-  .sticky .status.dirty{color:var(--danger);}
+  .sticky .status.dirty{color:var(--danger-text);}
   /* Thông báo kết quả Lưu/Xuất bản/lỗi nằm TRONG thanh cố định ở đáy → luôn trong khung nhìn. Rỗng thì ẩn. */
   /* Ô thông báo giữ nguyên tới khi có kết quả mới hoặc người dùng bấm "Đóng" (không tự ẩn). */
   .msgbar{flex:1 1 100%;order:-2;display:flex;align-items:flex-start;gap:8px;padding:0.4rem 0.4rem 0.4rem 0.65rem;border-radius:2px;border:1px solid var(--line);background:#FBF8F2;}
@@ -67,15 +68,17 @@
   .msgbar #editMsg{flex:1 1 auto;min-width:0;margin:0;min-height:0;font-size:14px;font-weight:500;line-height:1.45;padding-top:0.15rem;}
   .msgbar-close{flex:none;border:1px solid var(--line);background:#fff;border-radius:2px;padding:0.25rem 0.6rem;font-family:inherit;font-size:13px;color:var(--ink);cursor:pointer;}
   .sticky .live-note{flex:1 1 100%;order:-1;font-size:13px;color:var(--ink-soft);}
+  .sticky .live-note .ln-short{display:none;}   /* câu ngắn chỉ hiện trên điện thoại */
   .env.unknown{background:var(--danger);color:#fff;}
   .link-note{font-size:13px;color:var(--ink-soft);margin-top:0.35rem;}
   .m-item.unsaved,.a-item.unsaved{border-color:var(--danger);}
-  .unsaved-note{font-size:12.5px;color:var(--danger);}
+  .unsaved-note{font-size:12.5px;color:var(--danger-text);}
   .rep{border:1px solid var(--line);border-radius:3px;padding:0.75rem;margin-top:0.6rem;background:var(--paper);}
   .rep-top{display:flex;gap:8px;align-items:center;}
   .rep-top input{flex:1;}
   .rep-tools{display:flex;gap:4px;flex:none;}
   .rep-tools button{border:1px solid var(--line);background:none;border-radius:2px;width:32px;height:32px;cursor:pointer;font-size:13px;color:var(--ink-soft);}
+  .rep-tools button:last-child{margin-left:10px;color:var(--danger-text);border-color:rgba(176,85,63,0.4);}   /* ✕ (xóa mục) tách khỏi ↑ ↓ */
   .rep textarea{min-height:60px;margin-top:6px;}
   .portrait{display:flex;gap:16px;align-items:center;flex-wrap:wrap;}
   .portrait .ph{width:110px;height:110px;border-radius:50%;background:var(--ink);border:1px solid var(--brass-light);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none;}
@@ -86,12 +89,12 @@
   .m-item .thumb{aspect-ratio:1;background:var(--paper-deep);display:flex;align-items:center;justify-content:center;overflow:hidden;}
   .m-item .thumb img{width:100%;height:100%;object-fit:cover;cursor:zoom-in;}
   .m-item .thumb video{width:100%;height:100%;object-fit:contain;background:#000;}
-  .m-item .thumb .broken{font-size:12px;color:var(--danger);padding:0.5rem;text-align:center;}
+  .m-item .thumb .broken{font-size:12px;color:var(--danger-text);padding:0.5rem;text-align:center;}
   .m-item .body{padding:0.5rem;display:flex;flex-direction:column;gap:6px;}
-  .m-item .body input{font-size:13px;padding:0.4rem 0.5rem;}
+  .m-item .body input{font-size:16px;padding:0.4rem 0.5rem;}
   .m-item .tools{display:flex;gap:4px;flex-wrap:wrap;}
   .m-item .tools button{border:1px solid var(--line);background:none;border-radius:2px;padding:0.25rem 0.5rem;cursor:pointer;font-family:inherit;font-size:12px;color:var(--ink-soft);}
-  .m-item .tools button.del{color:var(--danger);border-color:rgba(176,85,63,0.4);}
+  .m-item .tools button.del{color:var(--danger-text);border-color:rgba(176,85,63,0.4);margin-left:auto;}   /* Xóa đẩy về cuối hàng, xa ← → */
   .upload-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:0.6rem;}
   .upload-row input[type=file]{font-size:13px;font-family:inherit;max-width:100%;}
   .busy{font-size:13px;color:var(--brass);}
@@ -104,12 +107,12 @@
   .a-list{display:flex;flex-direction:column;gap:10px;margin-top:0.8rem;}
   .a-item{border:1px solid var(--line);border-radius:3px;background:var(--paper);padding:0.6rem;display:flex;flex-direction:column;gap:6px;}
   .a-item audio{width:100%;}
-  .a-item textarea{min-height:60px;font-size:13px;}
-  .a-item input[type=text]{font-size:13.5px;padding:0.4rem 0.5rem;}
-  .a-item .broken{font-size:12.5px;color:var(--danger);}
+  .a-item textarea{min-height:60px;font-size:16px;}
+  .a-item input[type=text]{font-size:16px;padding:0.4rem 0.5rem;}
+  .a-item .broken{font-size:12.5px;color:var(--danger-text);}
   .a-item .tools{display:flex;gap:4px;flex-wrap:wrap;}
   .a-item .tools button{border:1px solid var(--line);background:none;border-radius:2px;padding:0.25rem 0.5rem;cursor:pointer;font-family:inherit;font-size:12px;color:var(--ink-soft);}
-  .a-item .tools button.del{color:var(--danger);border-color:rgba(176,85,63,0.4);}
+  .a-item .tools button.del{color:var(--danger-text);border-color:rgba(176,85,63,0.4);margin-left:auto;}   /* Xóa đẩy về cuối hàng, xa ↑ ↓ */
   .link-box{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:0.4rem;}
   .link-box code{background:var(--paper-deep);padding:3px 8px;border-radius:2px;font-size:12.5px;overflow-wrap:anywhere;}
   .gb-tabs{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:0.8rem;}
@@ -159,6 +162,19 @@
     .msgbar-close{padding:0.2rem 0.5rem;font-size:12.5px;}
     .sticky .btn{flex:1 1 0;min-width:0;padding:0.5rem 0.35rem;font-size:13px;}
     .ask .actions .btn{flex:1 1 100%;}
+    /* B2 (UI-07/UI-06): nút dễ bấm trên điện thoại — thao tác chính ≥44px, nút thường ≥40px */
+    .btn{min-height:40px;}
+    .btn.small{min-height:40px;padding:0.45rem 0.8rem;font-size:13.5px;}
+    .actions .btn.primary,.sticky .btn{min-height:44px;}
+    .sticky #publishBtn{margin-left:10px;}   /* Xuất bản / Ngừng xuất bản: cùng hàng nhưng tách xa Lưu và Xem trước */
+    .sticky .live-note .ln-long{display:none;}
+    .sticky .live-note .ln-short{display:inline;}
+    .msgbar-close{min-height:40px;}
+    .topbar button{min-height:40px;}
+    .gb-tab{min-height:40px;}
+    .m-item .tools button,.a-item .tools button{min-height:40px;padding:0.35rem 0.6rem;font-size:13px;}
+    .rep-tools button{width:40px;height:40px;}
+    .upload-row input[type=file]::file-selector-button{min-height:40px;padding:0 0.8rem;}
     html{scroll-padding-bottom:112px;}
     .qr-wrap img{width:100%;max-width:260px;margin:0 auto;}
     .qr-wrap .actions .btn{flex:1 1 140px;padding:0.6rem 0.7rem;font-size:13.5px;}
@@ -429,7 +445,7 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
         <div class="msg" id="editMsg" role="alert"></div>
         <button type="button" class="msgbar-close" id="editMsgClose" aria-label="Đóng thông báo">Đóng ✕</button>
       </div>
-      <div class="live-note" id="liveNote" hidden>Trang đang công khai — sau khi lưu, khách sẽ thấy nội dung mới.</div>
+      <div class="live-note" id="liveNote" hidden><span class="ln-long">Trang đang công khai — sau khi lưu, khách sẽ thấy nội dung mới.</span><span class="ln-short">Đang công khai — lưu là khách thấy ngay.</span></div>
       <div class="status" id="saveStatus">Chưa có thay đổi.</div>
       <button type="button" class="btn primary" id="saveBtn">Lưu nháp</button>
       <button type="button" class="btn" id="previewBtn">Xem trước</button>
