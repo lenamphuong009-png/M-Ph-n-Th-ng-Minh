@@ -475,25 +475,34 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
      QR được vẽ ngay trong trình duyệt — KHÔNG gửi đường dẫn của khách tới dịch vụ bên ngoài. -->
 <script src="vendor/qrcode-generator-2.0.4.js"
         integrity="sha384-e9EFD6BGC90bkW9aDV5xbbBfzwN7G8YImHao2lfLVKV/hPB0E0go+H3I64h7oHtA"></script>
+<!-- Cấu hình môi trường do bước build sinh ra (scripts/tn-build.mjs): chỉ chứa URL + publishable key của ĐÚNG 1 môi trường.
+     Thiếu tệp này (mở tệp gốc, bản tải lên tay) → trang KHÔNG kết nối dữ liệu. -->
+<script src="tn-build.js"></script>
 <script>
   // ===== CẤU HÌNH MÔI TRƯỜNG =====
   // Mỗi môi trường = 1 project Supabase. Chỉ dùng publishable key (công khai); quyền thật do RLS/Storage policy quyết định.
-  // KHÔNG BAO GIỜ đặt service_role / secret key ở đây. Môi trường chọn theo tên miền đang mở trang quản lý;
-  // tên miền lạ hoặc môi trường chưa cấu hình (null) → không kết nối, KHÔNG tự rơi về môi trường khác.
-  var TN_ENVS = {
-    staging:    { url: 'https://mhyadympadwxzuwwlnps.supabase.co', key: 'sb_publishable_JmjzqnFPKcC2bQ2T4Kr9vQ_QoFzdXN1' },
-    production: null  // chưa có project production
-  };
+  // KHÔNG BAO GIỜ đặt service_role / secret key ở đây. URL + key KHÔNG ghi trong tệp này: lấy từ window.TN_BUILD (tn-build.js).
+  // Hai điều kiện phải KHỚP NHAU mới kết nối: (1) môi trường suy từ tên miền đang mở (bảng dưới),
+  // (2) môi trường + vai trò 'admin' của bản build. Lệch, thiếu, hoặc tên miền lạ → không kết nối, KHÔNG tự rơi về môi trường khác.
   var ADMIN_HOST_ENV = {
     'quanly.phyverse.io.vn': 'staging',
     'staging-tn.phyverse.io.vn': 'staging',
     'phyverse-staging-tn.netlify.app': 'staging',
-    'engine-v1--glittery-swan-23c695.netlify.app': 'staging',
+    'quanly.phyverse.com.vn': 'production',
     '127.0.0.1': 'staging', 'localhost': 'staging'
   };
-  var TN_ENV_NAME = Object.prototype.hasOwnProperty.call(ADMIN_HOST_ENV, window.location.hostname) ? ADMIN_HOST_ENV[window.location.hostname] : null;
-  var TN_ENV = TN_ENV_NAME && Object.prototype.hasOwnProperty.call(TN_ENVS, TN_ENV_NAME) ? TN_ENVS[TN_ENV_NAME] : null;
-  if (TN_ENV && (!/^https:\/\/[a-z0-9]+\.supabase\.co$/.test(TN_ENV.url) || !/^sb_publishable_/.test(TN_ENV.key))) TN_ENV = null;
+  // Bản xem trước (Deploy Preview) của Pull Request trên site staging — luôn là staging
+  var ADMIN_HOST_PATTERNS = [ { re: /^deploy-preview-[1-9][0-9]{0,6}--phyverse-staging-tn\.netlify\.app$/, env: 'staging' } ];
+  function tnHostEnv(host){
+    if (Object.prototype.hasOwnProperty.call(ADMIN_HOST_ENV, host)) return ADMIN_HOST_ENV[host];
+    for (var i = 0; i < ADMIN_HOST_PATTERNS.length; i++) if (ADMIN_HOST_PATTERNS[i].re.test(host)) return ADMIN_HOST_PATTERNS[i].env;
+    return null;
+  }
+  var TN_BUILD = (typeof window.TN_BUILD === 'object' && window.TN_BUILD) ? window.TN_BUILD : null;
+  var TN_HOST_ENV = tnHostEnv(String(window.location.hostname || '').toLowerCase());
+  var TN_ENV_NAME = (TN_HOST_ENV && TN_BUILD && TN_BUILD.role === 'admin' && TN_BUILD.env === TN_HOST_ENV) ? TN_HOST_ENV : null;
+  var TN_ENV = TN_ENV_NAME ? { url: TN_BUILD.supabaseUrl, key: TN_BUILD.publishableKey } : null;
+  if (TN_ENV && (!/^https:\/\/[a-z0-9]{20}\.supabase\.co$/.test(TN_ENV.url) || !/^sb_publishable_/.test(TN_ENV.key))) { TN_ENV = null; TN_ENV_NAME = null; }
   // Nhãn môi trường ở thanh trên: CHỈ hiện tên khi tên miền khớp bảng ADMIN_HOST_ENV VÀ môi trường đó có cấu hình hợp lệ.
   // Không xác định được → giữ nhãn "Chưa xác định môi trường" (màu cảnh báo), không tự suy đoán.
   (function(){
@@ -636,7 +645,7 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
 
   var sb;
   if (!TN_ENV) {
-    $('bootMsg').textContent = 'Trang quản lý chưa được cấu hình cho tên miền này — không kết nối dữ liệu.';
+    $('bootMsg').textContent = 'Trang quản lý chưa được cấu hình cho tên miền này (hoặc bản build không khớp môi trường) — không kết nối dữ liệu.';
     throw new Error('Môi trường chưa được cấu hình cho ' + window.location.hostname);
   }
   try {
@@ -759,11 +768,26 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
 
   // ===== TẠO TRANG =====
   var slugTouched = false;
-  $('newName').addEventListener('input', function(){ if (!slugTouched) { $('newSlug').value = slugify(this.value); updateSlugPreview(); } });
+  // Vùng tên đường dẫn theo môi trường (staging và production dùng chung <slug>.phyverse.io.vn nên KHÔNG được trùng):
+  // staging BẮT BUỘC tiền tố thử; production KHÔNG được dùng tiền tố thử. PHẢI trùng index.html (TN_SLUG_TEST_PREFIXES).
+  var TN_SLUG_TEST_PREFIXES = ['thu-nghiem-', 'kiem-thu-'];
+  function isTestSlug(s){ return TN_SLUG_TEST_PREFIXES.some(function(p){ return s.indexOf(p) === 0 && s.length > p.length; }); }
+  function slugNamespaceError(s){
+    if (TN_ENV_NAME === 'staging' && !isTestSlug(s)) return 'Môi trường thử (Staging): đường dẫn phải bắt đầu bằng "thu-nghiem-" hoặc "kiem-thu-".';
+    if (TN_ENV_NAME === 'production' && isTestSlug(s)) return 'Đường dẫn bắt đầu bằng "thu-nghiem-" hoặc "kiem-thu-" chỉ dành cho môi trường thử.';
+    return null;
+  }
+  function autoSlug(name){
+    var s = slugify(name);
+    if (TN_ENV_NAME === 'staging' && s && !isTestSlug(s)) s = rtrimDash(('kiem-thu-' + s).slice(0, DNS_LABEL_MAX));
+    return s;
+  }
+  function rtrimDash(s){ return s.replace(/-+$/, ''); }
+  $('newName').addEventListener('input', function(){ if (!slugTouched) { $('newSlug').value = autoSlug(this.value); updateSlugPreview(); } });
   $('newSlug').addEventListener('input', function(){ slugTouched = this.value !== ''; this.value = this.value.toLowerCase(); updateSlugPreview(); });
   function updateSlugPreview(){
-    var s = $('newSlug').value;
-    $('newSlugPreview').textContent = s ? (publicUrl(s) ? 'Địa chỉ công khai sẽ là: ' + publicUrl(s) : 'Đường dẫn này không dùng được làm địa chỉ công khai (tối đa 63 ký tự, không dùng tên dành riêng).') : '';
+    var s = $('newSlug').value, nsErr = s ? slugNamespaceError(s) : null;
+    $('newSlugPreview').textContent = !s ? '' : (nsErr ? nsErr : (publicUrl(s) ? 'Địa chỉ công khai sẽ là: ' + publicUrl(s) : 'Đường dẫn này không dùng được làm địa chỉ công khai (tối đa 63 ký tự, không dùng tên dành riêng).'));
   }
   $('createForm').addEventListener('submit', function(e){
     e.preventDefault();
@@ -771,6 +795,8 @@ Ngày ....../....../........        Ký và ghi rõ họ tên</pre>
     if (!name) { setMsg($('createMsg'), 'Vui lòng nhập họ tên.', 'err'); return; }
     if (SLUG_RE.test(slug) && slug.length >= 3 && !publicUrl(slug)) { setMsg($('createMsg'), 'Đường dẫn này không dùng được làm địa chỉ công khai (tối đa 63 ký tự, không dùng tên dành riêng).', 'err'); return; }
     if (slug.length < 3 || !SLUG_RE.test(slug)) { setMsg($('createMsg'), 'Đường dẫn chỉ gồm chữ thường không dấu, số và dấu gạch ngang (3–63 ký tự), không bắt đầu/kết thúc bằng gạch ngang.', 'err'); return; }
+    var nsErr = slugNamespaceError(slug);
+    if (nsErr) { setMsg($('createMsg'), nsErr, 'err'); return; }
     var btn = $('createBtn'); btn.disabled = true; setMsg($('createMsg'), 'Đang tạo…');
     sb.rpc('create_memorial', { p_slug: slug, p_name: name }).then(function(res){
       if (res.error) throw res.error;
