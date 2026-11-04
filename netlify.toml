@@ -1,0 +1,7 @@
+# Memorial Engine — cấu hình build chung cho các site staging/production.
+# Môi trường và vai trò KHÔNG khai báo ở đây: script tra SITE_ID trong scripts/tn-build-config.json
+# và đối chiếu biến TN_DEPLOY_ENV / TN_SITE_ROLE đặt riêng trên từng site Netlify.
+# Chỉ xuất bản thư mục dist/ do script tạo (danh sách tệp cho phép).
+[build]
+  command = "sh scripts/tn-build.sh"
+  publish = "dist"

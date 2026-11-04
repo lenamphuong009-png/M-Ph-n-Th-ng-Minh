@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "_ghi_chu": "Nguồn DUY NHẤT của URL Supabase + publishable key cho bản build. Chỉ chứa khóa CÔNG KHAI (sb_publishable_). KHÔNG BAO GIỜ đặt service_role / secret key ở đây. Mọi thay đổi phải qua Pull Request.",
+  "environments": {
+    "staging": {
+      "supabase_ref": "mhyadympadwxzuwwlnps",
+      "supabase_url": "https://mhyadympadwxzuwwlnps.supabase.co",
+      "publishable_key": "sb_publishable_JmjzqnFPKcC2bQ2T4Kr9vQ_QoFzdXN1"
+    }
+  },
+  "roles": {
+    "admin": ["admin.html", "index.html", "vendor/qrcode-generator-2.0.4.js"],
+    "public": ["index.html"]
+  },
+  "sites": {
+    "bd773533-d3c1-4c26-86d2-2ea190623ae2": {
+      "site_name": "phyverse-staging-tn",
+      "env": "staging",
+      "role": "admin",
+      "allow": [
+        { "context": "production", "branch": "engine-v1" },
+        { "context": "deploy-preview" }
+      ]
+    }
+  }
+}
