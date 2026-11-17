@@ -34,6 +34,13 @@
       "allow": [
         { "context": "production", "branch": "release-v1" }
       ]
-    }
-  }
+    },
+       "3c429774-29fc-4eeb-be80-db8fe7b08dfb": {
+        "site_name": "phyverse-memorial-public-prod",
+        "env": "production",
+        "role": "public",
+        "allow": [
+          { "context": "production", "branch": "release-v1" }
+        ]
+       }
 }
