@@ -6,6 +6,11 @@
       "supabase_ref": "mhyadympadwxzuwwlnps",
       "supabase_url": "https://mhyadympadwxzuwwlnps.supabase.co",
       "publishable_key": "sb_publishable_JmjzqnFPKcC2bQ2T4Kr9vQ_QoFzdXN1"
+    },
+    "production": {
+      "supabase_ref": "jswnebhtxuvyzmcpruad",
+      "supabase_url": "https://jswnebhtxuvyzmcpruad.supabase.co",
+      "publishable_key": "sb_publishable_TcMPLVVpR3kuDEJrWIDE0A_tHoLAXuY"
     }
   },
   "roles": {
@@ -20,6 +25,14 @@
       "allow": [
         { "context": "production", "branch": "engine-v1" },
         { "context": "deploy-preview" }
+      ]
+    },
+    "42429c5d-bddb-481c-b81e-3a033af4a11a": {
+      "site_name": "phyverse-quanly-prod",
+      "env": "production",
+      "role": "admin",
+      "allow": [
+        { "context": "production", "branch": "release-v1" }
       ]
     }
   }
