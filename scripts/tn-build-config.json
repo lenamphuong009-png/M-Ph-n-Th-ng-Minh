@@ -26,6 +26,14 @@
         { "context": "production", "branch": "engine-v1" },
         { "context": "deploy-preview" }
       ]
+    },
+    "42429c5d-bddb-481c-b81e-3a033af4a11a": {
+      "site_name": "phyverse-quanly-prod",
+      "env": "production",
+      "role": "admin",
+      "allow": [
+        { "context": "production", "branch": "release-v1" }
+      ]
     }
   }
 }
