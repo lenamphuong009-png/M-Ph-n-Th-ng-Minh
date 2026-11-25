@@ -94,6 +94,22 @@ tcase('B27', 'Có dist/ cũ chứa tệp lạ trước khi build — phải bị
   d => { mkdirSync(join(d, 'dist', 'sql'), { recursive: true }); writeFileSync(join(d, 'dist', 'sql', 'old.sql'), 'x'); },
   d => JSON.stringify(walk(join(d, 'dist'))) === JSON.stringify(EXPECT_ADMIN) ? true : 'dist còn tệp cũ');
 
+// D-01 (25/11/2026): mọi trang Memorial Engine — quản trị và công khai — đều gửi X-Robots-Tag: noindex, nofollow.
+const robotsCheck = role => d => {
+  const hd = readFileSync(join(d, 'dist', '_headers'), 'utf8');
+  if (!/^  X-Robots-Tag: noindex, nofollow$/m.test(hd)) return '_headers thiếu X-Robots-Tag: noindex, nofollow';
+  if (!/X-Frame-Options: DENY/.test(hd) || !/X-Content-Type-Options: nosniff/.test(hd)) return '_headers mất header bảo vệ cũ';
+  const tb = readFileSync(join(d, 'dist', 'tn-build.js'), 'utf8');
+  if (!new RegExp('"role":"' + role + '"').test(tb)) return 'tn-build.js sai vai trò';
+  return true;
+};
+const PROD = { CONTEXT: 'production', BRANCH: 'release-v1', HEAD: 'release-v1', TN_DEPLOY_ENV: 'production' };
+tcase('B28', 'D-01: site công khai production (phyverse-memorial-public-prod) có X-Robots-Tag: noindex, nofollow',
+  { ...PROD, SITE_ID: '3c429774-29fc-4eeb-be80-db8fe7b08dfb', SITE_NAME: 'phyverse-memorial-public-prod', TN_SITE_ROLE: 'public' }, true, null, robotsCheck('public'));
+tcase('B29', 'D-01: site quản trị production (phyverse-quanly-prod) vẫn có X-Robots-Tag: noindex, nofollow',
+  { ...PROD, SITE_ID: '42429c5d-bddb-481c-b81e-3a033af4a11a', SITE_NAME: 'phyverse-quanly-prod', TN_SITE_ROLE: 'admin' }, true, null, robotsCheck('admin'));
+tcase('B30', 'D-01: site quản trị staging vẫn có X-Robots-Tag: noindex, nofollow', {}, true, null, robotsCheck('admin'));
+
 let pass = 0;
 for (const r of results) { console.log((r.ok ? "ĐẠT " : "LỖI ") + r.id + " [" + r.expect + "] " + r.desc + "  ⇒ " + r.note); if (r.ok) pass++; }
 console.log('TỔNG: ' + pass + '/' + results.length + ' đạt');

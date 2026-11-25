@@ -125,14 +125,14 @@ const buildJs = '/* Sinh tự động bởi scripts/tn-build.mjs — KHÔNG sử
   'window.TN_BUILD = Object.freeze(' + JSON.stringify(build) + ');\n';
 writeFileSync(join(DIST, 'tn-build.js'), buildJs);
 
-// _headers — trang quản trị không được lập chỉ mục, không cho nhúng khung; tn-build.js không lưu đệm lâu
+// _headers — trang quản trị và trang công khai (D-01, 25/11/2026) không được lập chỉ mục; không cho nhúng khung; tn-build.js không lưu đệm lâu
 const headers = [
   '/*',
   '  X-Frame-Options: DENY',
   '  X-Content-Type-Options: nosniff',
   '  Referrer-Policy: strict-origin-when-cross-origin'
 ];
-if (site.role === 'admin') headers.push('  X-Robots-Tag: noindex, nofollow');
+if (site.role === 'admin' || site.role === 'public') headers.push('  X-Robots-Tag: noindex, nofollow');
 headers.push('/tn-build.js', '  Cache-Control: no-cache');
 writeFileSync(join(DIST, '_headers'), headers.join('\n') + '\n');
 
